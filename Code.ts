@@ -1,6 +1,7 @@
 let inited = false;
 let headers = {};
 let reisenSheet: GoogleAppsScript.Spreadsheet.Sheet = null;
+let buchungenSheet: GoogleAppsScript.Spreadsheet.Sheet = null;
 
 // Indices are 1-based!!
 let mailIndex = 0; // E-Mail-Adresse
@@ -10,15 +11,22 @@ let zustimmungsIndex = 0; // Zustimmung zur SEPA-Lastschrift
 let bestätigungsIndex = 0; // Bestätigung (der Teilnahmebedingungen)
 let verifikationsIndex = 0; // Verifikation (der Email-Adresse)
 let anmeldebestIndex = 0; // Anmeldebestätigung (gesendet)
+let tourIndexB = 0; // Bei welchen Touren...
+let einzelnIndex = 0; // Reisen Sie alleine ...
+
+const tourFrage = "Bei welchen Touren möchten Sie mitfahren?";
+const einzelnFrage = "Reisen Sie alleine oder zu zweit?";
 
 function test() {
   init();
+  updateZimmerReste();
+  /*
   let e = {
     namedValues: {
-      "Reisen Sie alleine oder zu zweit?": ["Alleine (EZ)"],
+      einzelnFrage: ["Alleine (EZ)"],
       Name: ["Uhlenberg"],
       Vorname: ["Michael"],
-      "Bei welchen Touren möchten Sie mitfahren?": [
+      tourFrage: [
         // "Fahrradtour um den Gardasee vom 1.5. bis 12.5.",
         // "Transalp von Salzburg nach Venedig vom 2.5. bis 13.5.",
         "Entlang der Drau vom 3.5. bis 14.5",
@@ -29,9 +37,10 @@ function test() {
       "IBAN-Kontonummer": ["DE15700202702530131478"],
     },
   };
-  let sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Buchungen");
-  e["range"] = sheet.getRange(5, 1, 1, sheet.getLastColumn());
+  let sheet = buchungenSheet;
+  e["range"] = sheet.getRange(2, 1, 1, sheet.getLastColumn());
   dispatch(e);
+*/
 }
 
 function init() {
@@ -57,11 +66,14 @@ function init() {
       reisenSheet = sheet;
     }
     if (sheet.getName() == "Buchungen") {
+      buchungenSheet = sheet;
       mailIndex = sheetHeaders["E-Mail-Adresse"];
       herrFrauIndex = sheetHeaders["Anrede"];
       nameIndex = sheetHeaders["Name"];
       bestätigungsIndex = sheetHeaders["Bestätigung"];
       verifikationsIndex = sheetHeaders["Verifikation"];
+      tourIndexB = sheetHeaders[tourFrage];
+      einzelnIndex = sheetHeaders[einzelnFrage];
       if (verifikationsIndex == null) {
         verifikationsIndex = addColumn(sheet, sheetHeaders, "Verifikation");
       }
@@ -256,7 +268,6 @@ function verifyEmail() {
     evSheet.getLastColumn()
   ); // Mit dieser Email-Adresse
 
-  let buchungenSheet = ssheet.getSheetByName("Buchungen");
   let numRows = buchungenSheet.getLastRow();
   if (numRows <= 1) return;
   let rvalues = buchungenSheet.getSheetValues(
@@ -299,7 +310,8 @@ function checkBestellung(e) {
   let cellA = range.getCell(1, 1);
   Logger.log("sheet %s row %s cellA %s", sheet, row, cellA.getA1Notation());
 
-  let iban = e.namedValues["IBAN-Kontonummer"][0];
+  let ibanNV = e.namedValues["IBAN-Kontonummer"][0];
+  let iban = ibanNV.replace(/\s/g, "").toUpperCase();
   let emailTo = e.namedValues["E-Mail-Adresse"][0];
   Logger.log("iban=%s emailTo=%s %s", iban, emailTo, typeof emailTo);
   if (!isValidIban(iban)) {
@@ -307,17 +319,17 @@ function checkBestellung(e) {
     cellA.setNote("Ungültige IBAN");
     return;
   }
-
+  if (iban != ibanNV) {
+    let cellIban = range.getCell(1, headers["Buchungen"]["IBAN-Kontonummer"]);
+    cellIban.setValue(iban);
+  }
   // Die Zellen Zustimmung und Bestätigung sind im Formular als Pflichtantwort eingetragen
   // und können garnicht anders als gesetzt sein. Sonst hier prüfen analog zu IBAN.
 
-  let einzeln = e.namedValues[
-    "Reisen Sie alleine oder zu zweit?"
-  ][0].startsWith("Alleine");
+  let einzeln = e.namedValues[einzelnFrage][0].startsWith("Alleine");
   let restCol = einzeln
     ? headers["Reisen"]["EZ-Rest"]
     : headers["Reisen"]["DZ-Rest"];
-  let tourFrage = "Bei welchen Touren möchten Sie mitfahren?";
   let touren: Array<string> = e.namedValues[tourFrage];
   if (touren.length == 0) {
     // cannot happen, answer is mandatory
@@ -444,11 +456,100 @@ function update() {
   if (!inited) {
     init();
   }
-  updateRest();
+  updateZimmerReste();
   updateForm();
 }
 
-function updateRest() {}
+function updateZimmerReste() {
+  let reisenRows = reisenSheet.getLastRow() - 1; // first row = headers
+  let reisenCols = reisenSheet.getLastColumn();
+  let reisenVals = reisenSheet
+    .getRange(2, 1, reisenRows, reisenCols)
+    .getValues();
+  let reisenNotes = reisenSheet
+    .getRange(2, 1, reisenRows, reisenCols)
+    .getNotes();
+
+  let buchungenRows = buchungenSheet.getLastRow() - 1; // first row = headers
+  let buchungenCols = buchungenSheet.getLastColumn();
+  let buchungenVals = buchungenSheet
+    .getRange(2, 1, buchungenRows, buchungenCols)
+    .getValues();
+  let buchungenNotes = buchungenSheet
+    .getRange(2, 1, buchungenRows, buchungenCols)
+    .getNotes();
+
+  let ezimmer = {};
+  let dzimmer = {};
+  for (let b = 0; b < buchungenRows; b++) {
+    if (buchungenNotes[b][0] !== "") continue;
+    let tour = buchungenVals[b][tourIndexB - 1];
+    let einzeln = buchungenVals[b][einzelnIndex - 1].startsWith("Alleine");
+    let zimmer = einzeln ? ezimmer : dzimmer;
+    let anzahl: number = zimmer[tour];
+    if (anzahl == null) {
+      zimmer[tour] = 1;
+    } else {
+      zimmer[tour] = anzahl + 1;
+    }
+  }
+
+  let tourIndexR = headers["Reisen"]["Reise"];
+  let dzAnzahlIndex = headers["Reisen"]["DZ-Anzahl"];
+  let ezAnzahlIndex = headers["Reisen"]["EZ-Anzahl"];
+  let dzRestIndex = headers["Reisen"]["DZ-Rest"];
+  let ezRestIndex = headers["Reisen"]["EZ-Rest"];
+  for (let r = 0; r < reisenRows; r++) {
+    if (reisenNotes[r][0] !== "") continue;
+    let tour = reisenVals[r][tourIndexR - 1];
+    let dzAnzahl: number = reisenVals[r][dzAnzahlIndex - 1];
+    let ezAnzahl: number = reisenVals[r][ezAnzahlIndex - 1];
+    let dzGebucht: number = dzimmer[tour];
+    let ezGebucht: number = ezimmer[tour];
+    if (dzGebucht == null) dzGebucht = 0;
+    if (ezGebucht == null) ezGebucht = 0;
+    let dzRest: number = dzAnzahl - dzGebucht;
+    let ezRest: number = ezAnzahl - ezGebucht;
+    if (dzRest < 0) {
+      SpreadsheetApp.getUi().alert(
+        "DZ der Reise '" + tour + "' sind überbucht!"
+      );
+      dzRest = 0;
+    }
+    if (ezRest < 0) {
+      SpreadsheetApp.getUi().alert(
+        "EZ der Reise '" + tour + "' sind überbucht!"
+      );
+      ezRest = 0;
+    }
+    let dzRestR: number = reisenVals[r][dzRestIndex - 1];
+    if (dzRest !== dzRestR) {
+      reisenSheet.getRange(2 + r, dzRestIndex).setValue(dzRest);
+      SpreadsheetApp.getUi().alert(
+        "DZ-Rest der Reise '" +
+          tour +
+          "' von " +
+          dzRestR +
+          " auf " +
+          dzRest +
+          " geändert!"
+      );
+    }
+    let ezRestR: number = reisenVals[r][ezRestIndex - 1];
+    if (ezRest !== ezRestR) {
+      reisenSheet.getRange(2 + r, ezRestIndex).setValue(ezRest);
+      SpreadsheetApp.getUi().alert(
+        "EZ-Rest der Reise '" +
+          tour +
+          "' von " +
+          ezRestR +
+          " auf " +
+          ezRest +
+          " geändert!"
+      );
+    }
+  }
+}
 
 function updateForm() {
   let reisenHdrs: {} = headers["Reisen"];
@@ -457,9 +558,13 @@ function updateForm() {
   let reisenVals = reisenSheet
     .getRange(2, 1, reisenRows, reisenCols)
     .getValues();
+  let reisenNotes = reisenSheet
+    .getRange(2, 1, reisenRows, reisenCols)
+    .getNotes();
   Logger.log("reisen %s %s", reisenVals.length, reisenVals);
   let reisenObjs = [];
   for (let i = 0; i < reisenVals.length; i++) {
+    if (reisenNotes[i][0] !== "") continue;
     let reisenObj = {};
     for (let hdr in reisenHdrs) {
       let idx = reisenHdrs[hdr];
@@ -487,7 +592,7 @@ function updateForm() {
   for (let item of items) {
     //   let itemType = item.getType();
     //   Logger.log("title %s it %s %s", item.getTitle(), itemType, item.getIndex());
-    if (item.getTitle().startsWith("Bei welchen Touren")) {
+    if (item.getTitle() === tourFrage) {
       reisenItem = item.asCheckboxItem();
       break;
     }
@@ -603,7 +708,6 @@ let ibanLen = {
 };
 
 function isValidIban(iban: string) {
-  iban = iban.replace(/\s/g, "").toUpperCase();
   if (!iban.match(/^[\dA-Z]+$/)) return false;
   let len = iban.length;
   if (len != ibanLen[iban.substr(0, 2)]) return false;
