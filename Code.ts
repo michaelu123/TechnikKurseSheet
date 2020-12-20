@@ -6,7 +6,9 @@ let buchungenSheet: GoogleAppsScript.Spreadsheet.Sheet = null;
 // Indices are 1-based!!
 let mailIndex = 0; // E-Mail-Adresse
 let herrFrauIndex = 0; // Anrede
+let herrFrau1Index = 0; // Anrede 1
 let nameIndex = 0; // Name
+let name1Index = 0; // Name 1
 let zustimmungsIndex = 0; // Zustimmung zur SEPA-Lastschrift
 let bestätigungsIndex = 0; // Bestätigung (der Teilnahmebedingungen)
 let verifikationsIndex = 0; // Verifikation (der Email-Adresse)
@@ -19,28 +21,27 @@ const einzelnFrage = "Reisen Sie alleine oder zu zweit?";
 
 function test() {
   init();
-  updateZimmerReste();
-  /*
   let e = {
     namedValues: {
-      einzelnFrage: ["Alleine (EZ)"],
-      Name: ["Uhlenberg"],
-      Vorname: ["Michael"],
-      tourFrage: [
-        // "Fahrradtour um den Gardasee vom 1.5. bis 12.5.",
-        // "Transalp von Salzburg nach Venedig vom 2.5. bis 13.5.",
-        "Entlang der Drau vom 3.5. bis 14.5",
-      ],
-      Anrede: ["Herr"],
-      "E-Mail-Adresse": ["michael.uhlenberg@t-online.de"],
+      Name: ["Mei"],
+      Vorname: ["Lisa"],
+      Anrede: ["Frau"],
+      "E-Mail-Adresse": ["antonia.ruhdorfer@t-online.de"],
       "Gleiche Adresse wie Teilnehmer 1 ?": [],
       "IBAN-Kontonummer": ["DE15700202702530131478"],
     },
   };
+  e.namedValues[einzelnFrage] = ["Alleine (EZ)"];
+  e.namedValues[tourFrage] = [
+    // "Fahrradtour um den Gardasee vom 1.5. bis 12.5.",
+    // "Transalp von Salzburg nach Venedig vom 2.5. bis 13.5.",
+    "Das malerische Havelland entdecken vom 5.5. bis 16.5.",
+    "Entlang der Drau vom 3.5. bis 14.5",
+  ];
+
   let sheet = buchungenSheet;
-  e["range"] = sheet.getRange(2, 1, 1, sheet.getLastColumn());
+  e["range"] = sheet.getRange(5, 1, 1, sheet.getLastColumn());
   dispatch(e);
-*/
 }
 
 function init() {
@@ -69,7 +70,9 @@ function init() {
       buchungenSheet = sheet;
       mailIndex = sheetHeaders["E-Mail-Adresse"];
       herrFrauIndex = sheetHeaders["Anrede"];
+      herrFrau1Index = sheetHeaders["Anrede 1"];
       nameIndex = sheetHeaders["Name"];
+      name1Index = sheetHeaders["Name 1"];
       bestätigungsIndex = sheetHeaders["Bestätigung"];
       verifikationsIndex = sheetHeaders["Verifikation"];
       tourIndexB = sheetHeaders[tourFrage];
@@ -156,80 +159,95 @@ function attachmentFiles() {
   return files; // why not use PDFs directly??
 }
 
+function tourPreis(einzeln: boolean, reise: string) {
+  let reisenRows = reisenSheet.getLastRow() - 1; // first row = headers
+  let reisenCols = reisenSheet.getLastColumn();
+  let reisenVals = reisenSheet
+    .getRange(2, 1, reisenRows, reisenCols)
+    .getValues();
+  let reisenNotes = reisenSheet
+    .getRange(2, 1, reisenRows, reisenCols)
+    .getNotes();
+  let tourIndexR = headers["Reisen"]["Reise"];
+  let dzPreisIndex = headers["Reisen"]["DZ-Preis"];
+  let ezPreisIndex = headers["Reisen"]["EZ-Preis"];
+
+  let betrag = 0;
+  for (let i = 0; i < reisenRows; i++) {
+    if (reisenNotes[i][0] !== "") continue;
+    if (reisenVals[i][tourIndexR - 1] === reise) {
+      betrag = einzeln
+        ? reisenVals[i][ezPreisIndex - 1]
+        : 2 * reisenVals[i][dzPreisIndex - 1];
+      return betrag;
+    }
+  }
+  return 0;
+}
+
 //#########################################################
-function mailSchicken() {
+function anmeldebestätigung() {
+  if (!inited) init();
   let sheet = SpreadsheetApp.getActiveSheet();
-  let anmeldeSheets = SpreadsheetApp.openById(
-    "1Qx1t4dPqbrZYQ8cck9kPv_P8RPQfZHAjxeWr2nJavkQ"
-  ).getSheets(); // Textbausteine
-  let anmeldeTexte = anmeldeSheets[0];
-  let textColumn = 2;
-  let subjectRow = 3;
-  let bodyRow = 4;
-  let subjectTemplate = anmeldeTexte
-    .getRange(subjectRow, textColumn)
-    .getValue()
-    .toString();
-  let bodyTemplate = anmeldeTexte
-    .getRange(bodyRow, textColumn)
-    .getValue()
-    .toString();
   let row = sheet.getSelection().getCurrentCell().getRow();
-  if (row < 2 || row > sheet.getLastColumn()) {
+  if (row < 2 || row > sheet.getLastRow()) {
     SpreadsheetApp.getUi().alert(
       "Die ausgewählte Zeile ist ungültig, bitte zuerst Teilnehmerzeile selektieren"
     );
     return;
   }
+  let rowValues = sheet
+    .getRange(row, 1, 1, sheet.getLastColumn())
+    .getValues()[0];
+  let rowNote = sheet.getRange(row, 1).getNote();
+  if (rowNote !== "") {
+    SpreadsheetApp.getUi().alert(
+      "Die ausgewählte Zeile hat eine Notiz und ist deshalb ungültig"
+    );
+    return;
+  }
+  // setting up mail
+  let emailTo: string = rowValues[mailIndex - 1];
+  let subject: string = "Bestätigung Ihrer Buchung";
+  let einzeln: boolean = rowValues[einzelnIndex - 1].startsWith("Allein");
+  let herrFrau = einzeln
+    ? rowValues[herrFrauIndex - 1]
+    : rowValues[herrFrau1Index - 1];
+  let name = einzeln ? rowValues[nameIndex - 1] : rowValues[name1Index - 1];
+  // Anrede
+  let anrede: string = anredeText(herrFrau, name);
+  let template: GoogleAppsScript.HTML.HtmlTemplate = HtmlService.createTemplateFromFile(
+    "emailBestätigung.html"
+  );
+
+  let reise: string = rowValues[tourIndexB - 1];
+
+  let betrag: number = tourPreis(einzeln, reise);
+  template.anrede = anrede;
+  template.reise = reise;
+  template.betrag = betrag;
+
+  SpreadsheetApp.getUi().alert(
+    anrede +
+      "bucht für die Reise '" +
+      reise +
+      "'ein " +
+      (einzeln ? "EZ" : "DZ") +
+      " für " +
+      betrag +
+      "Euro"
+  );
+
+  let htmlText: string = template.evaluate().getContent();
+  let textbody = "HTML only";
+  let options = {
+    htmlBody: htmlText,
+    name: "Mehrtagestouren ADFC München e.V.",
+    replyTo: "michael.uhlenberg@adfc-muenchen.de",
+  };
+  GmailApp.sendEmail(emailTo, subject, textbody, options);
   // update sheet
   sheet.getRange(row, anmeldebestIndex).setValue(heuteString());
-
-  // setting up mail
-  let code = kursName(sheet.getName());
-  let empfaenger = sheet.getRange(row, mailIndex).getValue();
-  let subject = Utilities.formatString(subjectTemplate, code);
-  // Anrede
-  let anrede = anredeText(
-    sheet.getRange(row, herrFrauIndex).getValue(),
-    sheet.getRange(row, nameIndex).getValue()
-  );
-  // Zahlungstext
-  let zahlungsText = "";
-  // let zahlungsart = sheet.getRange(row, ZahlungsartIndex).getValue().toString();
-  // if (zahlungsart === "Überweisung") {
-  //   let überweisungsRow = 5;
-  //   let überweisungsTemplate = anmeldeTexte
-  //     .getRange(überweisungsRow, textColumn)
-  //     .getValue()
-  //     .toString();
-  //   zahlungsText = Utilities.formatString(
-  //     überweisungsTemplate,
-  //     Kursgebühr,
-  //     code
-  //   );
-  // } else {
-  //   let sepaRow = 6;
-  //   let sepaTemplate = anmeldeTexte
-  //     .getRange(sepaRow, textColumn)
-  //     .getValue()
-  //     .toString();
-  //   zahlungsText = Utilities.formatString(sepaTemplate, Kursgebühr);
-  // }
-  // Zusammensetzung Body
-  let body = Utilities.formatString(
-    bodyTemplate,
-    anrede,
-    code,
-    kursTermine(code),
-    zahlungsText
-  );
-
-  // setting up mail
-  GmailApp.sendEmail(empfaenger, subject, body, {
-    name: "Radfahrschule ADFC München e.V.",
-    replyTo: "radfahrschule@adfc-muenchen.de",
-    attachments: attachmentFiles(),
-  });
 }
 
 //#########################################################
@@ -237,13 +255,14 @@ function onOpen() {
   let ui = SpreadsheetApp.getUi();
   // Or DocumentApp or FormApp.
   ui.createMenu("ADFC-MTT")
-    .addItem("Anmeldebestätigung senden", "mailSchicken")
+    .addItem("Anmeldebestätigung senden", "anmeldebestätigung")
     .addItem("Update", "update")
     .addItem("Test", "test")
     .addToUi();
 }
 
 function dispatch(e) {
+  if (!inited) init();
   // let keys = Object.keys(e);
   // Logger.log("verif2", keys);
   // for (let key of keys) {
@@ -381,7 +400,7 @@ function checkBestellung(e) {
     updateForm();
   }
   Logger.log("msgs: ", msgs);
-  sendeAntwort(e, msgs.join("<br />"), sheet, buchungsRowNumbers);
+  sendeAntwort(e, msgs.join("\n"), sheet, buchungsRowNumbers);
 }
 
 function sendeAntwort(
@@ -453,9 +472,7 @@ function anrede(e) {
 }
 
 function update() {
-  if (!inited) {
-    init();
-  }
+  if (!inited) init();
   updateZimmerReste();
   updateForm();
 }
