@@ -19,8 +19,8 @@ function test() {
       Name: ["Uhlenberg"],
       Vorname: ["Michael"],
       "Bei welchen Touren möchten Sie mitfahren?": [
-        "Fahrradtour um den Gardasee vom 1.5. bis 12.5.",
-        "Transalp von Salzburg nach Venedig vom 2.5. bis 13.5.",
+        // "Fahrradtour um den Gardasee vom 1.5. bis 12.5.",
+        // "Transalp von Salzburg nach Venedig vom 2.5. bis 13.5.",
         "Entlang der Drau vom 3.5. bis 14.5",
       ],
       Anrede: ["Herr"],
@@ -30,7 +30,7 @@ function test() {
     },
   };
   let sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Buchungen");
-  e["range"] = sheet.getRange(3, 1, 1, sheet.getLastColumn());
+  e["range"] = sheet.getRange(5, 1, 1, sheet.getLastColumn());
   dispatch(e);
 }
 
@@ -163,20 +163,10 @@ function mailSchicken() {
     .getValue()
     .toString();
   let row = sheet.getSelection().getCurrentCell().getRow();
-  if (row < 2 || row > 15) {
+  if (row < 2 || row > sheet.getLastColumn()) {
     SpreadsheetApp.getUi().alert(
       "Die ausgewählte Zeile ist ungültig, bitte zuerst Teilnehmerzeile selektieren"
     );
-    return;
-  }
-  if (
-    sheet
-      .getRange(row, bestätigungsIndex)
-      .getValue()
-      .toString()
-      .indexOf("Ich habe") != 0
-  ) {
-    SpreadsheetApp.getUi().alert("Hat Teilnahmebedingungen nicht zugestimmt");
     return;
   }
   // update sheet
@@ -236,7 +226,7 @@ function onOpen() {
   // Or DocumentApp or FormApp.
   ui.createMenu("ADFC-MTT")
     .addItem("Anmeldebestätigung senden", "mailSchicken")
-    .addItem("Anmeldeformular Update", "updateForm")
+    .addItem("Update", "update")
     .addItem("Test", "test")
     .addToUi();
 }
@@ -253,10 +243,10 @@ function dispatch(e) {
   Logger.log("dispatch sheet %s", sheet.getName());
   if (sheet.getName() == "Test") checkBestellung(e);
   if (sheet.getName() == "Buchungen") checkBestellung(e);
-  if (sheet.getName() == "Email-Verifikation") verifyEmail2();
+  if (sheet.getName() == "Email-Verifikation") verifyEmail();
 }
 
-function verifyEmail2() {
+function verifyEmail() {
   let ssheet = SpreadsheetApp.getActiveSpreadsheet();
   let evSheet = ssheet.getSheetByName("Email-Verifikation");
   let evalues = evSheet.getSheetValues(
@@ -266,36 +256,31 @@ function verifyEmail2() {
     evSheet.getLastColumn()
   ); // Mit dieser Email-Adresse
 
-  let sheets = ssheet.getSheets();
-  for (let rx in sheets) {
-    let mttSheet = sheets[rx];
-    Logger.log("mttSheet %s %s", mttSheet, mttSheet.getName());
-    if (mttSheet.getName().indexOf("Buchungen") != 0) continue;
-    let numRows = mttSheet.getLastRow();
-    if (numRows <= 1) continue;
-    let rvalues = mttSheet.getSheetValues(
-      2,
-      1,
-      numRows - 1,
-      mttSheet.getLastColumn()
-    );
-    Logger.log("rvalues %s", rvalues);
+  let buchungenSheet = ssheet.getSheetByName("Buchungen");
+  let numRows = buchungenSheet.getLastRow();
+  if (numRows <= 1) return;
+  let rvalues = buchungenSheet.getSheetValues(
+    2,
+    1,
+    numRows - 1,
+    buchungenSheet.getLastColumn()
+  );
+  Logger.log("rvalues %s", rvalues);
 
-    for (let bx in rvalues) {
-      let bxi = +bx; // confusingly, bx is initially a string, and is interpreted as A1Notation in sheet.getRange(bx) !
-      let rrow = rvalues[bxi];
-      if (rrow[mailIndex - 1] != "" && rrow[verifikationsIndex - 1] == "") {
-        let raddr = rrow[1];
-        for (let ex in evalues) {
-          let erow = evalues[ex];
-          if (erow[1] != "Ja" || erow[2] == "") continue;
-          let eaddr = erow[2];
-          if (eaddr != raddr) continue;
-          // Bestellungen[Verifiziert] = Email-Verif[Zeitstempel]
-          mttSheet.getRange(bxi + 2, verifikationsIndex).setValue(erow[0]);
-          rrow[verifikationsIndex - 1] = erow[0];
-          break;
-        }
+  for (let bx in rvalues) {
+    let bxi = +bx; // confusingly, bx is initially a string, and is interpreted as A1Notation in sheet.getRange(bx) !
+    let rrow = rvalues[bxi];
+    if (rrow[mailIndex - 1] != "" && rrow[verifikationsIndex - 1] == "") {
+      let raddr = rrow[1];
+      for (let ex in evalues) {
+        let erow = evalues[ex];
+        if (erow[1] != "Ja" || erow[2] == "") continue;
+        let eaddr = erow[2];
+        if (eaddr != raddr) continue;
+        // Bestellungen[Verifiziert] = Email-Verif[Zeitstempel]
+        buchungenSheet.getRange(bxi + 2, verifikationsIndex).setValue(erow[0]);
+        rrow[verifikationsIndex - 1] = erow[0];
+        break;
       }
     }
   }
@@ -303,7 +288,7 @@ function verifyEmail2() {
 
 function checkBestellung(e) {
   let keys = Object.keys(e);
-  Logger.log("checkBest", keys);
+  Logger.log("checkBest", keys, typeof e);
   for (let key of keys) {
     Logger.log("key %s val %s", key, e[key]);
   }
@@ -314,9 +299,7 @@ function checkBestellung(e) {
   let cellA = range.getCell(1, 1);
   Logger.log("sheet %s row %s cellA %s", sheet, row, cellA.getA1Notation());
 
-  let iban = e.namedValues["IBAN-Kontonummer"][0]
-    .replace(" ", "")
-    .toUpperCase();
+  let iban = e.namedValues["IBAN-Kontonummer"][0];
   let emailTo = e.namedValues["E-Mail-Adresse"][0];
   Logger.log("iban=%s emailTo=%s %s", iban, emailTo, typeof emailTo);
   if (!isValidIban(iban)) {
@@ -328,11 +311,19 @@ function checkBestellung(e) {
   // Die Zellen Zustimmung und Bestätigung sind im Formular als Pflichtantwort eingetragen
   // und können garnicht anders als gesetzt sein. Sonst hier prüfen analog zu IBAN.
 
+  let einzeln = e.namedValues[
+    "Reisen Sie alleine oder zu zweit?"
+  ][0].startsWith("Alleine");
+  let restCol = einzeln
+    ? headers["Reisen"]["EZ-Rest"]
+    : headers["Reisen"]["DZ-Rest"];
   let tourFrage = "Bei welchen Touren möchten Sie mitfahren?";
   let touren: Array<string> = e.namedValues[tourFrage];
   if (touren.length == 0) {
+    // cannot happen, answer is mandatory
     return;
   }
+  let buchungsRowNumbers = [row];
   if (touren.length > 1) {
     let numCols = sheet.getLastColumn();
     let tourCellNo = headers["Buchungen"][tourFrage];
@@ -345,29 +336,85 @@ function checkBestellung(e) {
       range.copyTo(toRange);
       let tourCell = toRange.getCell(1, tourCellNo);
       tourCell.setValue(touren[i]);
+      buchungsRowNumbers.push(toRow);
     }
     let tourCell = range.getCell(1, tourCellNo);
     tourCell.setValue(touren[0]);
   }
 
-  let msg = "";
-  if (sheet.getName() == "Test") {
-    verifyEmail1(e, msg);
+  let msgs = [];
+  let reisen: Array<Array<string>> = reisenSheet.getSheetValues(
+    2,
+    1,
+    reisenSheet.getLastRow(),
+    reisenSheet.getLastColumn()
+  );
+  let restChanged = false;
+  for (let i = 0; i < touren.length; i++) {
+    for (let j = 0; j < reisen.length; j++) {
+      if (reisen[j][0] == touren[i]) {
+        let rest = reisenSheet.getRange(2 + j, restCol).getValue();
+        if (rest <= 0) {
+          msgs.push("Die Reise '" + touren[i] + "' ist leider ausgebucht.");
+          sheet.getRange(buchungsRowNumbers[i], 1).setNote("Ausgebucht");
+        } else {
+          msgs.push("Sie sind für die Reise '" + touren[i] + "' vorgemerkt.");
+          reisenSheet.getRange(2 + j, restCol).setValue(rest - 1);
+          restChanged = true;
+        }
+      }
+    }
   }
+  if (restChanged) {
+    updateForm();
+  }
+  Logger.log("msgs: ", msgs);
+  sendeAntwort(e, msgs.join("<br />"), sheet, buchungsRowNumbers);
 }
 
-function verifyEmail1(e, msg: String) {
+function sendeAntwort(
+  e,
+  msg: String,
+  sheet: GoogleAppsScript.Spreadsheet.Sheet,
+  buchungsRowNumbers: Array<number>
+) {
   let emailTo = e.namedValues["E-Mail-Adresse"][0];
   Logger.log("emailTo=" + emailTo);
-  let html = HtmlService.createTemplateFromFile("emailVerif.html");
-  html.anrede = anrede(e);
-  html.verifLink =
+
+  let templateFile = "emailVerif.html";
+
+  // do we already know this email address?
+  let ss = SpreadsheetApp.getActiveSpreadsheet();
+  let evSheet = ss.getSheetByName("Email-Verifikation");
+  let evalues = evSheet.getSheetValues(2, 1, evSheet.getLastRow() - 1, 3);
+  for (let i = 0; i < evalues.length; i++) {
+    // Mit dieser Email-Adresse
+    if (evalues[i][2] == emailTo) {
+      templateFile = "emailReply.html"; // yes, don't ask for verification
+      let verifiedCol = headers["Buchungen"]["Verifikation"];
+      for (let j = 0; j < buchungsRowNumbers.length; j++) {
+        sheet
+          .getRange(buchungsRowNumbers[j], verifiedCol)
+          .setValue(evalues[i][0]);
+      }
+      break;
+    }
+  }
+
+  let template: GoogleAppsScript.HTML.HtmlTemplate = HtmlService.createTemplateFromFile(
+    templateFile
+  );
+  template.anrede = anrede(e);
+  template.msg = msg;
+  template.verifLink =
     "https://docs.google.com/forms/d/e/1FAIpQLScLF2jogdsQGOI_A4gvGVvmrasN6pS5MZgY7xvqSjMB87F6uw/viewform?usp=pp_url&entry.1398709542=Ja&entry.576071197=" +
     encodeURIComponent(emailTo);
 
-  let htmlText = html.evaluate().getContent();
-  Logger.log("htmlText=" + htmlText);
-  let subject = "Bestätigung Ihrer Email-Adresse";
+  let htmlText: string = template.evaluate().getContent();
+  let subject =
+    templateFile === "emailVerif.html"
+      ? "Bestätigung Ihrer Email-Adresse"
+      : "Bestätigung Ihrer Anmeldung";
   let textbody = "HTML only";
   let options = {
     htmlBody: htmlText,
@@ -379,33 +426,31 @@ function verifyEmail1(e, msg: String) {
 
 function anrede(e) {
   let res = "";
-  let anrede = "";
-  let vorname = "";
-  let name = "";
-  let formResponse = e.response;
-  let itemResponses = formResponse.getItemResponses();
-  for (let j = 0; j < itemResponses.length; j++) {
-    let itemResponse = itemResponses[j];
-    let q = itemResponse.getItem().getTitle().toString();
-    let a = itemResponse.getResponse().toString();
-    if (q == "Anrede") {
-      if (a == "Herr") a = "Sehr geehrter Herr ";
-      else a = "Sehr geehrte Frau ";
-      anrede = a;
-    }
-    if (q == "Vorname") vorname = a + " ";
-    if (q == "Name") {
-      name = a;
-      break;
-    }
+  let anrede = e.namedValues["Anrede"][0];
+  let vorname = e.namedValues["Vorname"];
+  if (vorname == null || vorname.length == 0)
+    vorname = e.namedValues["Vorname 1"];
+  let name = e.namedValues["Name"];
+  if (name == null || name.length == 0) name = e.namedValues["Name 1"];
+  if (anrede == "Herr") {
+    anrede = "Sehr geehrter Herr ";
+  } else {
+    anrede = "Sehr geehrte Frau ";
   }
-  return anrede + vorname + name;
+  return anrede + vorname + " " + name;
 }
 
-function updateForm() {
+function update() {
   if (!inited) {
     init();
   }
+  updateRest();
+  updateForm();
+}
+
+function updateRest() {}
+
+function updateForm() {
   let reisenHdrs: {} = headers["Reisen"];
   let reisenRows = reisenSheet.getLastRow() - 1; // first row = headers
   let reisenCols = reisenSheet.getLastColumn();
@@ -424,7 +469,10 @@ function updateForm() {
     let ok = true;
     // check if all cells of Reise row are nonempty
     for (let hdr in reisenHdrs) {
-      if (!reisenObj[hdr] || reisenObj[hdr] === "") ok = false;
+      if (reisenObj[hdr] === "") ok = false;
+    }
+    if (ok) {
+      ok = +reisenObj["DZ-Rest"] > 0 || +reisenObj["EZ-Rest"] > 0;
     }
     if (ok) reisenObjs.push(reisenObj);
   }
@@ -478,20 +526,6 @@ function updateForm() {
   reisenItem.setChoices(choices);
 }
 
-function isValidIban(iban: string) {
-  iban = iban.replace(/\s/g, "").toUpperCase();
-  if (!iban.match(/^[\dA-Z]+$/)) return false;
-  let len = iban.length;
-  if (len != ibanLen[iban.substr(0, 2)]) return false;
-  iban = iban.substr(4) + iban.substr(0, 4);
-  let s = "";
-  for (let i = 0; i < len; i += 1) s += parseInt(iban.charAt(i), 36);
-  let m = +s.substr(0, 15) % 97;
-  s = s.substr(15);
-  for (; s; s = s.substr(13)) m = +("" + m + s.substr(0, 13)) % 97;
-  return m == 1;
-}
-
 function sendWrongIbanEmail(empfaenger: string, iban: string) {
   var subject = "Falsche IBAN";
   var body =
@@ -501,7 +535,7 @@ function sendWrongIbanEmail(empfaenger: string, iban: string) {
   GmailApp.sendEmail(empfaenger, subject, body);
 }
 
-var ibanLen = {
+let ibanLen = {
   NO: 15,
   BE: 16,
   DK: 18,
@@ -567,6 +601,20 @@ var ibanLen = {
   MU: 30,
   MT: 31,
 };
+
+function isValidIban(iban: string) {
+  iban = iban.replace(/\s/g, "").toUpperCase();
+  if (!iban.match(/^[\dA-Z]+$/)) return false;
+  let len = iban.length;
+  if (len != ibanLen[iban.substr(0, 2)]) return false;
+  iban = iban.substr(4) + iban.substr(0, 4);
+  let s = "";
+  for (let i = 0; i < len; i += 1) s += parseInt(iban.charAt(i), 36);
+  let m = +s.substr(0, 15) % 97;
+  s = s.substr(15);
+  for (; s; s = s.substr(13)) m = +("" + m + s.substr(0, 13)) % 97;
+  return m == 1;
+}
 
 /*
 19.12.2020, 07:16:02	Info	key namedValues val {Reisen Sie alleine oder zu zweit?=[Alleine (EZ)], Name=[Uhlenberg, ], Bei welchen Touren möchten Sie mitfahren?=[Fahrradtour um den Gardasee vom 1.5. bis 12.5., Transalp von Salzburg nach Venedig vom 2.5. bis 13.5., Entlang der Drau vom 3.5. bis 14.5], Telefonnummer für Rückfragen 2=[], Bestätigung=[Ich habe die Teilnahmebedingungen zur Kenntnis genommen und verstanden.], Anrede=[Herr, ], Postleitzahl=[81479, ], Zeitstempel=[19.12.2020 07:16:01], Straße und Hausnummer 2=[], Straße und Hausnummer=[Ludwigshöher Str., ], IBAN-Kontonummer=[DE44ZZZ00000793122], E-Mail-Adresse=[michael.uhlenberg@t-online.de], Postleitzahl 2=[], Anrede 2=[], Telefonnummer für Rückfragen=[015771574094, ], Zustimmung zur SEPA-Lastschrift=[Ich stimme der SEPA-Lastschrift zu], Ort 2=[], Vorname 2=[], Name der Bank (optional)=[hvb], Name des Kontoinhabers=[muh], Ort=[München, ], Name 2=[], Vorname=[Michael, ], Gleiche Adresse wie Teilnehmer 1 ?=[], =[]} keys [Zustimmung zur SEPA-Lastschrift, Anrede, Straße und Hausnummer, Gleiche Adresse wie Teilnehmer 1 ?, Postleitzahl 2, Vorname 2, Bei welchen Touren möchten Sie mitfahren?, Ort, Zeitstempel, IBAN-Kontonummer, Name der Bank (optional), Name 2, Telefonnummer für Rückfragen 2, Bestätigung, E-Mail-Adresse, Straße und Hausnummer 2, Ort 2, Name des Kontoinhabers, Vorname, , Name, Postleitzahl, Reisen Sie alleine oder zu zweit?, Telefonnummer für Rückfragen, Anrede 2]
