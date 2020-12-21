@@ -6,9 +6,12 @@
   <body>
     <p>
       <?= anrede ?>,<br /><br />
-      wir haben von Ihnen eine Anmeldung für eine oder mehrere Mehrtagestour(en)
-      erhalten.<br /><br />
-      <?= msg ?><br /><br />
+      wir haben von Ihnen eine Anmeldung für eine oder mehrere Mehrtagestour(en) erhalten.<br />
+      <? for (let msg of msgs) { ?>
+        <p>
+          <?= msg ?>
+        </p>
+      <? } ?>  
       Mit freundlichen Grüßen,<br />
       <br />
       Allgemeiner Deutscher Fahrrad-Club München e.V.<br />

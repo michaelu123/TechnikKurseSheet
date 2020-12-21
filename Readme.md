@@ -75,4 +75,8 @@ Bitte lieber nicht. Lieber in der ersten Spalte eine Notiz setzen.
 
 ### Änderungswünsche
 
-Je eher, je lieber.
+Je eher, desto weniger Zeitdruck, desto lieber.
+
+### Fake-IBAN
+
+DE91100000000123456789 ist eine syntaktisch gültige IBAN für Testzwecke.

@@ -6,9 +6,12 @@
   <body>
     <p>
       <?= anrede ?>,<br /><br />
-      wir haben eine Anmeldung für eine oder mehrere Mehrtagestour(en)
-      erhalten.<br />
-      <?= msg ?><br /><br />
+      wir haben von Ihnen eine Anmeldung für eine oder mehrere Mehrtagestour(en) erhalten.<br />
+      <? for (let msg of msgs) { ?>
+        <p>
+          <?= msg ?>
+        </p>
+      <? } ?>  
       Wir möchten wissen: War die Anmeldung wirklich von Ihnen?<br />
       Wenn ja, klicken Sie bitte auf
       <a href="<?= verifLink ?>">diesen Link</a>.<br />
