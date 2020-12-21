@@ -117,23 +117,6 @@ function anredeText(herrFrau, name) {
 }
 
 //#########################################################
-function kursName(fileName) {
-  let nameString = fileName.toString(fileName);
-  let codeName = "";
-  codeName = nameString.substring(0, 8);
-  return codeName;
-}
-
-//#########################################################
-function kursTermine(code) {
-  let text = "";
-  text =
-    "Interner Fehler: Für diesen Kurs ist kein Kursdatum im Skript hinterlegt";
-  SpreadsheetApp.getUi().alert(text);
-  return text;
-}
-
-//#########################################################
 function heuteString() {
   return Utilities.formatDate(
     new Date(),
@@ -189,6 +172,12 @@ function tourPreis(einzeln: boolean, reise: string) {
 function anmeldebestätigung() {
   if (!inited) init();
   let sheet = SpreadsheetApp.getActiveSheet();
+  if (sheet.getName() != "Buchungen") {
+    SpreadsheetApp.getUi().alert(
+      "Bitte eine Zeile im Sheet 'Buchungen' selektieren";
+    );
+    return;
+  }
   let row = sheet.getSelection().getCurrentCell().getRow();
   if (row < 2 || row > sheet.getLastRow()) {
     SpreadsheetApp.getUi().alert(
@@ -257,7 +246,7 @@ function onOpen() {
   ui.createMenu("ADFC-MTT")
     .addItem("Anmeldebestätigung senden", "anmeldebestätigung")
     .addItem("Update", "update")
-    .addItem("Test", "test")
+    // .addItem("Test", "test")
     .addToUi();
 }
 
@@ -489,12 +478,17 @@ function updateZimmerReste() {
 
   let buchungenRows = buchungenSheet.getLastRow() - 1; // first row = headers
   let buchungenCols = buchungenSheet.getLastColumn();
-  let buchungenVals = buchungenSheet
-    .getRange(2, 1, buchungenRows, buchungenCols)
-    .getValues();
-  let buchungenNotes = buchungenSheet
-    .getRange(2, 1, buchungenRows, buchungenCols)
-    .getNotes();
+  let buchungenVals: any[][];
+  let buchungenNotes: string[][];
+  if (buchungenRows == 0) {
+    buchungenVals = [[]];
+    buchungenNotes = [[]];
+  } else {
+    buchungenSheet.getRange(2, 1, buchungenRows, buchungenCols).getValues();
+    buchungenNotes = buchungenSheet
+      .getRange(2, 1, buchungenRows, buchungenCols)
+      .getNotes();
+  }
 
   let ezimmer = {};
   let dzimmer = {};
