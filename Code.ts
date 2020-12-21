@@ -730,12 +730,3 @@ function isValidIban(iban: string) {
   for (; s; s = s.substr(13)) m = +("" + m + s.substr(0, 13)) % 97;
   return m == 1;
 }
-
-/*
-19.12.2020, 07:16:02	Info	key namedValues val {Reisen Sie alleine oder zu zweit?=[Alleine (EZ)], Name=[Uhlenberg, ], Bei welchen Touren möchten Sie mitfahren?=[Fahrradtour um den Gardasee vom 1.5. bis 12.5., Transalp von Salzburg nach Venedig vom 2.5. bis 13.5., Entlang der Drau vom 3.5. bis 14.5], Telefonnummer für Rückfragen 2=[], Bestätigung=[Ich habe die Teilnahmebedingungen zur Kenntnis genommen und verstanden.], Anrede=[Herr, ], Postleitzahl=[81479, ], Zeitstempel=[19.12.2020 07:16:01], Straße und Hausnummer 2=[], Straße und Hausnummer=[Ludwigshöher Str., ], IBAN-Kontonummer=[DE44ZZZ00000793122], E-Mail-Adresse=[michael.uhlenberg@t-online.de], Postleitzahl 2=[], Anrede 2=[], Telefonnummer für Rückfragen=[015771574094, ], Zustimmung zur SEPA-Lastschrift=[Ich stimme der SEPA-Lastschrift zu], Ort 2=[], Vorname 2=[], Name der Bank (optional)=[hvb], Name des Kontoinhabers=[muh], Ort=[München, ], Name 2=[], Vorname=[Michael, ], Gleiche Adresse wie Teilnehmer 1 ?=[], =[]} keys [Zustimmung zur SEPA-Lastschrift, Anrede, Straße und Hausnummer, Gleiche Adresse wie Teilnehmer 1 ?, Postleitzahl 2, Vorname 2, Bei welchen Touren möchten Sie mitfahren?, Ort, Zeitstempel, IBAN-Kontonummer, Name der Bank (optional), Name 2, Telefonnummer für Rückfragen 2, Bestätigung, E-Mail-Adresse, Straße und Hausnummer 2, Ort 2, Name des Kontoinhabers, Vorname, , Name, Postleitzahl, Reisen Sie alleine oder zu zweit?, Telefonnummer für Rückfragen, Anrede 2]
-19.12.2020, 07:16:02	Info	key range val Range keys [columnEnd, columnStart, rowEnd, rowStart]
-19.12.2020, 07:16:02	Info	key source val Spreadsheet keys []
-19.12.2020, 07:16:02	Info	key triggerUid val 5721330 keys [0, 1, 2, 3, 4, 5, 6]
-19.12.2020, 07:16:02	Info	key values val [19.12.2020 07:16:01, michael.uhlenberg@t-online.de, Fahrradtour um den Gardasee vom 1.5. bis 12.5., Transalp von Salzburg nach Venedig vom 2.5. bis 13.5., Entlang der Drau vom 3.5. bis 14.5, Alleine (EZ), Herr, Michael, Uhlenberg, 81479, München, Ludwigshöher Str., 015771574094, , , , , , , , , , , , , , , , muh, hvb, DE44ZZZ00000793122, Ich stimme der SEPA-Lastschrift zu, Ich habe die Teilnahmebedingungen zur Kenntnis genommen und verstanden., ] keys [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]
-
-*/
