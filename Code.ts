@@ -1,31 +1,47 @@
+interface MapS2I {
+  [others: string]: number;
+}
+interface MapS2S {
+  [others: string]: string;
+}
+interface HeaderMap {
+  [others: string]: MapS2I;
+}
+
 let inited = false;
-let headers = {};
-let reisenSheet: GoogleAppsScript.Spreadsheet.Sheet = null;
-let buchungenSheet: GoogleAppsScript.Spreadsheet.Sheet = null;
+let headers: HeaderMap = {};
+let reisenSheet: GoogleAppsScript.Spreadsheet.Sheet;
+let buchungenSheet: GoogleAppsScript.Spreadsheet.Sheet;
 
 // Indices are 1-based!!
-let mailIndex = 0; // E-Mail-Adresse
-let herrFrauIndex = 0; // Anrede
-let herrFrau1Index = 0; // Anrede 1
-let nameIndex = 0; // Name
-let name1Index = 0; // Name 1
-let zustimmungsIndex = 0; // Zustimmung zur SEPA-Lastschrift
-let bestätigungsIndex = 0; // Bestätigung (der Teilnahmebedingungen)
-let verifikationsIndex = 0; // Verifikation (der Email-Adresse)
-let anmeldebestIndex = 0; // Anmeldebestätigung (gesendet)
-let tourIndexB = 0; // Bei welchen Touren...
-let einzelnIndex = 0; // Reisen Sie alleine ...
+let mailIndex: number; // E-Mail-Adresse
+let herrFrauIndex: number; // Anrede
+let herrFrau1Index: number; // Anrede 1
+let nameIndex: number; // Name
+let name1Index: number; // Name 1
+let zustimmungsIndex: number; // Zustimmung zur SEPA-Lastschrift
+let bestätigungsIndex: number; // Bestätigung (der Teilnahmebedingungen)
+let verifikationsIndex: number; // Verifikation (der Email-Adresse)
+let anmeldebestIndex: number; // Anmeldebestätigung (gesendet)
+let tourIndexB: number; // Bei welchen Touren möchten Sie mitfahren?
+let einzelnIndex: number; // Reisen Sie alleine oder zu zweit?
 
 const tourFrage = "Bei welchen Touren möchten Sie mitfahren?";
 const einzelnFrage = "Reisen Sie alleine oder zu zweit?";
 
-function isEmpty(str: string) {
+interface Event {
+  namedValues: { [others: string]: string[] };
+  range: GoogleAppsScript.Spreadsheet.Range;
+  [others: string]: any;
+}
+
+function isEmpty(str: string | undefined) {
   return !str || 0 === str.length;
 }
 
 function test() {
   init();
-  let e = {
+  let e: Event = {
     namedValues: {
       "Vorname 1": ["Michael"],
       "Name 1": ["Uhlenberg"],
@@ -37,6 +53,7 @@ function test() {
       "Gleiche Adresse wie Teilnehmer 1 ?": ["ja"],
       "IBAN-Kontonummer": ["DE91100000000123456789"],
     },
+    range: buchungenSheet.getRange(2, 1, 1, buchungenSheet.getLastColumn()),
   };
   e.namedValues[einzelnFrage] = ["Zu zweit (DZ)"];
   e.namedValues[tourFrage] = [
@@ -46,9 +63,6 @@ function test() {
     // Durch die ungarische Steppe vom 4.5. bis 15.5.",
     //"Entlang der Drau vom 3.5. bis 14.5",
   ];
-
-  let sheet = buchungenSheet;
-  e["range"] = sheet.getRange(2, 1, 1, sheet.getLastColumn());
   dispatch(e);
 }
 
@@ -57,7 +71,7 @@ function init() {
   let sheets = ss.getSheets();
   for (let sheet of sheets) {
     let sheetName = sheet.getName();
-    let sheetHeaders = {};
+    let sheetHeaders: MapS2I = {};
     // Logger.log("sheetName %s", sheetName);
     headers[sheetName] = sheetHeaders;
     let numCols = sheet.getLastColumn();
@@ -65,8 +79,8 @@ function init() {
     let row1Vals = sheet.getRange(1, 1, 1, numCols).getValues();
     // Logger.log("sheetName %s row1 %s", sheetName, row1Vals);
     for (let i = 0; i < numCols; i++) {
-      let v = row1Vals[0][i];
-      if (!v) continue;
+      let v: string = row1Vals[0][i];
+      if (isEmpty(v)) continue;
       sheetHeaders[v] = i + 1;
     }
     // Logger.log("sheet %s %s", sheetName, sheetHeaders);
@@ -97,9 +111,10 @@ function init() {
   }
 }
 
+// add a cell in row 1 with a new column title, return its index
 function addColumn(
   sheet: GoogleAppsScript.Spreadsheet.Sheet,
-  sheetHeaders: {},
+  sheetHeaders: MapS2I,
   title: string
 ): number {
   let max = 0;
@@ -115,8 +130,7 @@ function addColumn(
   return max;
 }
 
-//#########################################################
-function anredeText(herrFrau, name) {
+function anredeText(herrFrau: string, name: string) {
   if (herrFrau === "Herr") {
     return "Sehr geehrter Herr " + name;
   } else {
@@ -124,7 +138,6 @@ function anredeText(herrFrau, name) {
   }
 }
 
-//#########################################################
 function heuteString() {
   return Utilities.formatDate(
     new Date(),
@@ -133,7 +146,6 @@ function heuteString() {
   );
 }
 
-//#########################################################
 function attachmentFiles() {
   let thisFileId = SpreadsheetApp.getActive().getId();
   let thisFile = DriveApp.getFileById(thisFileId);
@@ -176,7 +188,6 @@ function tourPreis(einzeln: boolean, reise: string) {
   return 0;
 }
 
-//#########################################################
 function anmeldebestätigung() {
   if (!inited) init();
   let sheet = SpreadsheetApp.getActiveSheet();
@@ -186,7 +197,12 @@ function anmeldebestätigung() {
     );
     return;
   }
-  let row = sheet.getSelection().getCurrentCell().getRow();
+  let curCell = sheet.getSelection().getCurrentCell();
+  if (!curCell) {
+    SpreadsheetApp.getUi().alert("Bitte zuerst Teilnehmerzeile selektieren");
+    return;
+  }
+  let row = curCell.getRow();
   if (row < 2 || row > sheet.getLastRow()) {
     SpreadsheetApp.getUi().alert(
       "Die ausgewählte Zeile ist ungültig, bitte zuerst Teilnehmerzeile selektieren"
@@ -207,7 +223,6 @@ function anmeldebestätigung() {
     SpreadsheetApp.getUi().alert("Email-Adresse nicht verifiziert");
     return;
   }
-  let best = rowValues[anmeldebestIndex - 1];
   if (!isEmpty(rowValues[anmeldebestIndex - 1])) {
     SpreadsheetApp.getUi().alert("Die Reise wurde schon bestätigt");
     return;
@@ -259,7 +274,6 @@ function anmeldebestätigung() {
   sheet.getRange(row, anmeldebestIndex).setValue(heuteString());
 }
 
-//#########################################################
 function onOpen() {
   let ui = SpreadsheetApp.getUi();
   // Or DocumentApp or FormApp.
@@ -270,18 +284,18 @@ function onOpen() {
     .addToUi();
 }
 
-function dispatch(e) {
+function dispatch(e: Event) {
   if (!inited) init();
   // let keys = Object.keys(e);
   // Logger.log("verif2", keys);
   // for (let key of keys) {
   //   Logger.log("key %s val %s keys %s", key, e[key], Object.keys(e[key]));
   // }
-  let range: GoogleAppsScript.Spreadsheet.Range = e["range"];
+  let range: GoogleAppsScript.Spreadsheet.Range = e.range;
   let sheet = range.getSheet();
   Logger.log("dispatch sheet", sheet.getName(), range.getA1Notation());
-  if (sheet.getName() == "Test") checkBestellung(e);
-  if (sheet.getName() == "Buchungen") checkBestellung(e);
+  if (sheet.getName() == "Test") checkBuchung(e);
+  if (sheet.getName() == "Buchungen") checkBuchung(e);
   if (sheet.getName() == "Email-Verifikation") verifyEmail();
 }
 
@@ -320,7 +334,7 @@ function verifyEmail() {
         if (erow[1] != "Ja" || isEmpty(erow[2])) continue;
         let eaddr = erow[2];
         if (eaddr != baddr) continue;
-        // Bestellungen[Verifiziert] = Email-Verif[Zeitstempel]
+        // Buchungen[Verifiziert] = Email-Verif[Zeitstempel]
         buchungenSheet.getRange(bxi + 2, verifikationsIndex).setValue(erow[0]);
         brow[verifikationsIndex - 1] = erow[0];
         break;
@@ -329,14 +343,14 @@ function verifyEmail() {
   }
 }
 
-function checkBestellung(e) {
+function checkBuchung(e: Event) {
   let keys = Object.keys(e);
-  Logger.log("checkBest", keys, typeof e);
+  Logger.log("checkBuch", keys, typeof e);
   for (let key of keys) {
     Logger.log("key %s val %s", key, e[key]);
   }
 
-  let range: GoogleAppsScript.Spreadsheet.Range = e["range"];
+  let range: GoogleAppsScript.Spreadsheet.Range = e.range;
   let sheet = range.getSheet();
   let row = range.getRow();
   let cellA = range.getCell(1, 1);
@@ -365,8 +379,9 @@ function checkBestellung(e) {
     : headers["Reisen"]["DZ-Rest"];
   let touren: Array<string> = [];
   let tourenNV: Array<string> = e.namedValues[tourFrage];
+  // actually, tourenNV = e.g. ["tour1, tour2, tour3"], i.e. just one element
   for (let tour of tourenNV) {
-    let tourenList = tour.split(","); // we don't want commas within a tour title!
+    let tourenList = tour.split(","); // that's the reason why we don't want commas within a tour title!
     for (let tlItem of tourenList) {
       touren.push(tlItem.trim());
     }
@@ -377,6 +392,8 @@ function checkBestellung(e) {
     // cannot happen, answer is mandatory
     return;
   }
+
+  // for each tour besides the first create a new row, and put the tour into it
   let buchungsRowNumbers = [row];
   if (touren.length > 1) {
     let numCols = sheet.getLastColumn();
@@ -392,6 +409,7 @@ function checkBestellung(e) {
       tourCell.setValue(touren[i]);
       buchungsRowNumbers.push(toRow);
     }
+    // put the first tour into the original row
     let tourCell = range.getCell(1, tourCellNo);
     tourCell.setValue(touren[0]);
   }
@@ -449,7 +467,7 @@ function checkBestellung(e) {
 }
 
 function sendeAntwort(
-  e,
+  e: Event,
   msgs: Array<string>,
   sheet: GoogleAppsScript.Spreadsheet.Sheet,
   buchungsRowNumbers: Array<number>
@@ -503,8 +521,8 @@ function sendeAntwort(
   GmailApp.sendEmail(emailTo, subject, textbody, options);
 }
 
-function anrede(e) {
-  // if Name is not set, "Name 1" has value [""] !
+function anrede(e: Event) {
+  // if Name is not set, nv["Name"] has value [""], i.e. not null, not [], not [null]!
   let anredeA: Array<string> = e.namedValues["Anrede"];
   if (anredeA == null || anredeA.length == 0 || isEmpty(anredeA[0])) {
     anredeA = e.namedValues["Anrede 1"];
@@ -553,6 +571,7 @@ function updateZimmerReste() {
   let buchungenCols = buchungenSheet.getLastColumn();
   let buchungenVals: any[][];
   let buchungenNotes: string[][];
+  // getRange with 0 rows throws an exception instead of returning an empty array
   if (buchungenRows == 0) {
     buchungenVals = [];
     buchungenNotes = [];
@@ -565,8 +584,8 @@ function updateZimmerReste() {
       .getNotes();
   }
 
-  let ezimmer = {};
-  let dzimmer = {};
+  let ezimmer: MapS2I = {};
+  let dzimmer: MapS2I = {};
   for (let b = 0; b < buchungenRows; b++) {
     if (!isEmpty(buchungenNotes[b][0])) continue;
     let tour = buchungenVals[b][tourIndexB - 1];
@@ -638,7 +657,7 @@ function updateZimmerReste() {
 }
 
 function updateForm() {
-  let reisenHdrs: {} = headers["Reisen"];
+  let reisenHdrs = headers["Reisen"];
   let reisenRows = reisenSheet.getLastRow() - 1; // first row = headers
   let reisenCols = reisenSheet.getLastColumn();
   let reisenVals = reisenSheet
@@ -651,7 +670,7 @@ function updateForm() {
   let reisenObjs = [];
   for (let i = 0; i < reisenVals.length; i++) {
     if (!isEmpty(reisenNotes[i][0])) continue;
-    let reisenObj = {};
+    let reisenObj: MapS2S = {};
     for (let hdr in reisenHdrs) {
       let idx = reisenHdrs[hdr];
       // Logger.log("hdr %s %s", hdr, idx);
@@ -726,7 +745,7 @@ function sendWrongIbanEmail(empfaenger: string, iban: string) {
   GmailApp.sendEmail(empfaenger, subject, body);
 }
 
-let ibanLen = {
+let ibanLen: MapS2I = {
   NO: 15,
   BE: 16,
   DK: 18,
