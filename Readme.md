@@ -1,31 +1,29 @@
-# Tabellen, Formulare und Skripten für die ADFC Mehrtagestouren (MTT)
+# Tabellen, Formulare und Skripten für die ADFC Technikkurse
 
 ## Links
 
-Das Formular kann unter https://forms.gle/yJp12y4tKy8bqs4h6 ausgefüllt werden. Die Backend-Tabelle dazu kann unter
-https://docs.google.com/spreadsheets/d/1LNopZRbkggBm4OtRRp-YtRBFKKv1z8no0xLEhk-K8mo/edit?usp=sharing
+Das Formular kann unter https://forms.gle/BstMopCR9vYiiiQL8 ausgefüllt werden. Die Backend-Tabelle dazu kann unter
+https://docs.google.com/spreadsheets/d/1jm8GL-Xblyh7vORDvWljbBgz0hbFXArrWpl96WCZVGU/edit?usp=sharing
 angesehen werden.
 
-Beides muß später, wie schon bei den Anmeldungen zur RFS und den Saisonkarten, in die Ablage eines neu zu schaffenden Benutzers Mehrtagestouren@adfc-muenchen.de kopiert werden, damit dieser Benutzer als Absender in den verschickten Emails erscheint. Momentan steckt alles noch in meiner privaten Ablage.
-
-Ich habe Thomas eine Schreibberechtigung für die Tabelle erteilt, alle anderen sollten nur lesen können. Bei Bedarf melden.
+Beides muß später, wie schon bei den Anmeldungen zur RFS und den Saisonkarten, in die Ablage eines neu zu schaffenden Benutzers Technikkurse@adfc-muenchen.de kopiert werden, damit dieser Benutzer als Absender in den verschickten Emails erscheint. Momentan steckt alles noch in meiner privaten Ablage.
 
 ## Neuerungen
 
-Das Formular hat keinen Limiter und kein Skript mehr. Die Email-Verifikation wird von der Backend-Tabelle aus gesteuert. Die Reisen im Formular speisen sich aus einem Sheet der Backend-Tabelle. Das Formular wird nach jeder Buchung auf den aktuellen Stand der freien Zimmer gebracht. Von der Tabelle aus kann das Formular auch über einen Update-Knopf aktualisiert werden, wenn z.B. Reisen hinzugefügt oder gelöscht werden.
+Das Formular hat keinen Limiter und kein Skript mehr. Die Email-Verifikation wird von der Backend-Tabelle aus gesteuert. Die Kurse im Formular speisen sich aus einem Sheet der Backend-Tabelle. Das Formular wird nach jeder Buchung auf den aktuellen Stand der freien Kursplätze gebracht. Von der Tabelle aus kann das Formular auch über einen Update-Knopf aktualisiert werden, wenn z.B. Kurse hinzugefügt oder gelöscht werden.
 
 ## Die Backend-Tabelle
 
-Die Backend-Tabelle hat die 3 Sheets Email-Verifikation, Buchungen, Reisen.
+Die Backend-Tabelle hat die 3 Sheets Email-Verifikation, Buchungen, Kurse.
 
 ### Notizen
 
-Für die Buchungen- und Reisentabelle gilt: Steht in der Spalte A einer Tabelle eine Notiz, wird diese Zeile ignoriert. Buchungen mit einer ungültigen IBAN bekommen z.B. eine Notiz "IBAN ungültig". Buchungen für eine Reise deren Anzahl freier Zimmer 0 ist, bekommen eine Notiz "Ausgebucht".
-Reisen, die stattgefunden haben, können mit "Abgeschlossen" o.ä. notiert werden. Stornierte Reisen können als "Storniert" notiert werden, usw. Damit soll das Löschen von Zeilen unnötig gemacht werden, damit die Historie einsehbar bleibt.
+Für die Buchungen- und Kursetabelle gilt: Steht in der Spalte A einer Tabelle eine Notiz, wird diese Zeile ignoriert. Buchungen mit einer ungültigen IBAN bekommen z.B. eine Notiz "IBAN ungültig". Buchungen für einen Kurs dessen Anzahl freier Plätze 0 ist, bekommen eine Notiz "Ausgebucht".
+Kurse, die stattgefunden haben, können mit "Abgeschlossen" o.ä. notiert werden. Stornierte Kurse können als "Storniert" notiert werden, usw. Damit soll das Löschen von Zeilen unnötig gemacht werden, damit die Historie einsehbar bleibt.
 
-### Reisen
+### Kurse
 
-Im Reisen-Sheet stehen der Name der Reise, einschließlich von-bis, der DZ- und EZ-Preis, die DZ- und EZ-Anzahl, der DZ- und EZ-Rest. Jede Reise (sofern ohne Notiz) erscheint im Formular mit Preisen und freien Zimmern. Der Name der Reise soll natürlich eindeutig sein.
+Im Kurse-Sheet stehen die Nummer , der Name und das Datum des Kurses, einschließlich von-bis, die Anzahl der Kursplätze, und die Anzahl der freien Kursplätze. Jeder Kurs (sofern ohne Notiz) erscheint im Formular mit freien Plätzen.
 
 ### Buchungen
 
@@ -49,25 +47,25 @@ Das Skript ist in Typescript programmiert (Endung .ts). Durch "flask push" wird 
 
 Über Skripteditor/Bearbeiten/Trigger des aktuellen Projekts ist ein Trigger "Aus Tabelle - Bei Formularübermittlung" gesetzt, der die Funktion dispatch aufruft.
 
-Über die "onOpen"-Funktion wird im Backend ein Menü-Eintrag ADFC-MTT erzeugt, mit den Menüpunkten "Anmeldebestätigung senden" und "Update". Wie bei der RFS wird derzeit die Anmeldebestätigung NICHT automatisch verschickt. Vielmehr wählt man eine Zeile im Buchungen-Sheet und sendet dann die Anmeldebestätigung für diese Reise.
+Über die "onOpen"-Funktion wird im Backend ein Menü-Eintrag ADFC-TK erzeugt, mit den Menüpunkten "Anmeldebestätigung senden" und "Update". Die Anmeldebestätigung wird aber normalerweise automatisch verschickt. Wenn das nicht geklappt haben sollte, kann man eine Zeile im Buchungen-Sheet wählen und sendet dann die Anmeldebestätigung für diesen Kurs.
 
-Update kann man aufrufen, wenn man in Buchungen oder Reisen irgendwelche Änderungen durchgeführt hat, wie z.B. Stornierungen oder neue Reisen. Damit wird für alle Reisen die Anzahl der freien Zimmer gleich der Anzahl verfügbarer Zimmer minus die Anzahl gebuchter Zimmer gesetzt, und das Formular upgedatet (geupdatet?). Der Aufrufer wird über jede Änderung informiert, um Überraschungen vorzubeugen. Vor allem wird auch vor Überbuchungen gewarnt (Zahl freier Zimmer < 0), die durch Manipulation der Tabellen entstehen könnten.
+Update kann man aufrufen, wenn man in Buchungen oder Kurse irgendwelche Änderungen durchgeführt hat, wie z.B. Stornierungen oder neue Kurse. Damit wird für alle Reisen die Anzahl der freien Plätze gleich der Anzahl verfügbarer Plätze minus die Anzahl gebuchter Plätze gesetzt, und das Formular upgedatet (geupdatet?). Der Aufrufer wird über jede Änderung informiert, um Überraschungen vorzubeugen. Vor allem wird auch vor Überbuchungen gewarnt (Zahl freier Plätze < 0), die durch Manipulation der Tabellen entstehen könnten.
 
 ### Mehrfachbuchungen
 
-Im Formular kann man mehrere Reisen gleichzeitig buchen. Das Skript erstellt für jede gebuchte Reise eine eigene Zeile im Buchungen-Sheet.
+Im Formular kann man mehrere Kurse gleichzeitig buchen. Das Skript erstellt für jeden gebuchten Kurs eine eigene Zeile im Buchungen-Sheet.
 
 ### Sortieren
 
-Die Tabellen können beliebig sortiert werden, um z.B. in Buchungen alle Buchungen für eine Reise oder alle Buchungen einer Person zusammenhängend zu sehen. Die Zeile 1 mit den Headern ist fixiert und sollte das auch bleiben (Ansicht/Fixieren/1 Zeile).
+Die Tabellen können beliebig sortiert werden, um z.B. in Buchungen alle Buchungen für einen Kurs oder alle Buchungen einer Person zusammenhängend zu sehen. Die Zeile 1 mit den Headern ist fixiert und sollte das auch bleiben (Ansicht/Fixieren/1 Zeile).
 
-### Erste Mail
+### Erste Mail oder Anmeldebestätigung
 
-Nach Abschicken des Formulars erhält der Teilnehmer unter der von ihm angegebenen Email-Adresse eine erste Mail. In dieser steht, was er gebucht hat, ob er vorgemerkt ist oder das Zimmer ausgebucht war, und er wird ggfs. zur Verifikation der Email aufgefordert, falls die Email-Adresse noch unbekannt ist.
+Nach Abschicken des Formulars erhält der Teilnehmer unter der von ihm angegebenen Email-Adresse eine erste Mail. In dieser steht, was er gebucht hat, ob er vorgemerkt ist oder der Kurs ausgebucht war, und er wird ggfs. zur Verifikation der Email aufgefordert, falls die Email-Adresse noch unbekannt ist. Ist die Email-Adresse schon bekannt, erhält er gleich eine Mail mit Zu- oder Absage.
 
 ### Zweite Mail / Anmeldebestätigung
 
-Diese wird durch den Knopf "Anmeldebestätigung senden" verschickt, und enthält die Reise, EZ oder DZ, und den Preis (bei DZ 2 mal der DZ-Preis), mit der Androhung der baldigen Abbuchung.
+Hat der Kunde als erste email einen Aufruf zur Emailverifikation bekommen, und hat er das Formular dazu abgeschickt, bekommt er jetzt die Anmeldebestätigung. Diese enthält den oder die Kurs(e), und den Gesamt-Preis, mit der Androhung der baldigen Abbuchung. Der Gesamtpreis bestimmt sich aus seinen Angaben zu ADFC-Mitglied und Studierender, mal Anzahl der Kurse.
 
 ### Löschen
 
@@ -80,3 +78,18 @@ Je eher, desto weniger Zeitdruck, desto lieber.
 ### Fake-IBAN
 
 DE91100000000123456789 ist eine syntaktisch gültige IBAN für Testzwecke.
+
+## Setup Visual Studio Code / Typescript
+
+See https://developers.google.com/apps-script/guides/typescript.
+Installieren: node.js, visual studio code.
+Dann:
+
+```
+    npm install -g @google/clasp
+    npm install -S @types/google-apps-script
+    clasp clone <scriptid>  # im Projektverzeichnis, scriptid = id des skripts, daß der SkriptEditor aufmacht.
+```
+
+Danach existiert Datei .clasp.json mit der scriptid.
+In VSCode das Projektverzeichnis öffnen. Terminal öffnen, clasp push -w starten.

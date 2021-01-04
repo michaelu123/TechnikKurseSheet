@@ -302,7 +302,7 @@ function anmeldebestätigungen(
 function onOpen() {
   let ui = SpreadsheetApp.getUi();
   // Or DocumentApp or FormApp.
-  ui.createMenu("ADFC-MTT")
+  ui.createMenu("ADFC-TK")
     .addItem("Anmeldebestätigung senden", "anmeldebestätigung")
     .addItem("Update", "update")
     .addItem("Test", "test")
