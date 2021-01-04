@@ -7,27 +7,32 @@ interface MapS2S {
 interface HeaderMap {
   [others: string]: MapS2I;
 }
-
 let inited = false;
 let headers: HeaderMap = {};
-let reisenSheet: GoogleAppsScript.Spreadsheet.Sheet;
+let kurseSheet: GoogleAppsScript.Spreadsheet.Sheet;
 let buchungenSheet: GoogleAppsScript.Spreadsheet.Sheet;
 
 // Indices are 1-based!!
+// Buchungen:
 let mailIndex: number; // E-Mail-Adresse
+let mitgliederNrIndex: number;
+let studentIndex: number;
 let herrFrauIndex: number; // Anrede
-let herrFrau1Index: number; // Anrede 1
 let nameIndex: number; // Name
-let name1Index: number; // Name 1
 let zustimmungsIndex: number; // Zustimmung zur SEPA-Lastschrift
 let bestätigungsIndex: number; // Bestätigung (der Teilnahmebedingungen)
 let verifikationsIndex: number; // Verifikation (der Email-Adresse)
 let anmeldebestIndex: number; // Anmeldebestätigung (gesendet)
-let tourIndexB: number; // Bei welchen Touren möchten Sie mitfahren?
-let einzelnIndex: number; // Reisen Sie alleine oder zu zweit?
+let kurseIndex: number; // Welche Kurse möchten Sie belegen?
 
-const tourFrage = "Bei welchen Touren möchten Sie mitfahren?";
-const einzelnFrage = "Reisen Sie alleine oder zu zweit?";
+// Kurse:
+let kursNummerIndex: number; // Kursnummer
+let kursTitelIndex: number; // Kurstitel
+let kursDatumIndex: number; // Kursdatum
+let kursPlätzeIndex: number; // Kursplätze
+let restPlätzeIndex: number; // Restplätze
+
+const kursFrage = "Welche Kurse möchten Sie belegen?";
 
 interface Event {
   namedValues: { [others: string]: string[] };
@@ -35,34 +40,32 @@ interface Event {
   [others: string]: any;
 }
 
-function isEmpty(str: string | undefined) {
-  return !str || 0 === str.length;
+function isEmpty(str: string | undefined | null) {
+  return !str || 0 === str.length; // I think !str is sufficient...
 }
 
 function test() {
   init();
   let e: Event = {
     namedValues: {
-      "Vorname 1": ["Michael"],
-      "Name 1": ["Uhlenberg"],
-      "Anrede 1": ["Herr"],
-      "Vorname 2": ["Antonia"],
-      "Name 2": ["Ruhdorfer"],
-      "Anrede 2": ["Frau"],
+      Vorname: ["Michael"],
+      Name: ["Uhlenberg"],
+      Anrede: ["Herr"],
       "E-Mail-Adresse": ["michael.uhlenberg@t-online.de"],
-      "Gleiche Adresse wie Teilnehmer 1 ?": ["ja"],
       "IBAN-Kontonummer": ["DE91100000000123456789"],
+      "ADFC-Mitgliedsnummer": ["1234"],
+      "Studieren Sie?": ["Nein"],
+      [kursFrage]: [
+        "K712: Ich mach' das schon - Pannenhilfe für Mütter und Töchter am 01.08.2020",
+        "K713: Grundkurs für Räder mit Kettenschaltung am 11.08.2020",
+        //  "K710: Praxiskurs - Kettenschaltung am 24.06.2020"
+      ],
     },
     range: buchungenSheet.getRange(2, 1, 1, buchungenSheet.getLastColumn()),
+    // range: SpreadsheetApp.getActiveSpreadsheet()
+    //  .getSheetByName("Email-Verifikation")
+    //  .getRange(2, 1, 1, 3),
   };
-  e.namedValues[einzelnFrage] = ["Zu zweit (DZ)"];
-  e.namedValues[tourFrage] = [
-    // "Fahrradtour um den Gardasee vom 1.5. bis 12.5.",
-    // "Transalp von Salzburg nach Venedig vom 2.5. bis 13.5.",
-    "Das malerische Havelland entdecken vom 5.5. bis 16.5.",
-    // Durch die ungarische Steppe vom 4.5. bis 15.5.",
-    //"Entlang der Drau vom 3.5. bis 14.5",
-  ];
   dispatch(e);
 }
 
@@ -85,20 +88,24 @@ function init() {
     }
     // Logger.log("sheet %s %s", sheetName, sheetHeaders);
 
-    if (sheet.getName() == "Reisen") {
-      reisenSheet = sheet;
+    if (sheet.getName() == "Kurse") {
+      kurseSheet = sheet;
+      kursNummerIndex = sheetHeaders["Kursnummer"];
+      kursTitelIndex = sheetHeaders["Kurstitel"];
+      kursDatumIndex = sheetHeaders["Kursdatum"];
+      kursPlätzeIndex = sheetHeaders["Kursplätze"];
+      restPlätzeIndex = sheetHeaders["Restplätze"];
     }
     if (sheet.getName() == "Buchungen") {
       buchungenSheet = sheet;
       mailIndex = sheetHeaders["E-Mail-Adresse"];
+      mitgliederNrIndex = sheetHeaders["ADFC-Mitgliedsnummer"];
+      studentIndex = sheetHeaders["Studieren Sie?"];
       herrFrauIndex = sheetHeaders["Anrede"];
-      herrFrau1Index = sheetHeaders["Anrede 1"];
       nameIndex = sheetHeaders["Name"];
-      name1Index = sheetHeaders["Name 1"];
       bestätigungsIndex = sheetHeaders["Bestätigung"];
       verifikationsIndex = sheetHeaders["Verifikation"];
-      tourIndexB = sheetHeaders[tourFrage];
-      einzelnIndex = sheetHeaders[einzelnFrage];
+      kurseIndex = sheetHeaders[kursFrage];
       if (verifikationsIndex == null) {
         verifikationsIndex = addColumn(sheet, sheetHeaders, "Verifikation");
       }
@@ -107,8 +114,8 @@ function init() {
         anmeldebestIndex = addColumn(sheet, sheetHeaders, "Anmeldebestätigung");
       }
     }
-    inited = true;
   }
+  inited = true;
 }
 
 // add a cell in row 1 with a new column title, return its index
@@ -162,29 +169,11 @@ function attachmentFiles() {
   return files; // why not use PDFs directly??
 }
 
-function tourPreis(einzeln: boolean, reise: string) {
-  let reisenRows = reisenSheet.getLastRow() - 1; // first row = headers
-  let reisenCols = reisenSheet.getLastColumn();
-  let reisenVals = reisenSheet
-    .getRange(2, 1, reisenRows, reisenCols)
-    .getValues();
-  let reisenNotes = reisenSheet
-    .getRange(2, 1, reisenRows, reisenCols)
-    .getNotes();
-  let tourIndexR = headers["Reisen"]["Reise"];
-  let dzPreisIndex = headers["Reisen"]["DZ-Preis"];
-  let ezPreisIndex = headers["Reisen"]["EZ-Preis"];
-
-  let betrag = 0;
-  for (let i = 0; i < reisenRows; i++) {
-    if (!isEmpty(reisenNotes[i][0])) continue;
-    if (reisenVals[i][tourIndexR - 1] === reise) {
-      betrag = einzeln
-        ? reisenVals[i][ezPreisIndex - 1]
-        : 2 * reisenVals[i][dzPreisIndex - 1];
-      return betrag;
-    }
-  }
+function kursPreis(mitglied: boolean, student: boolean) {
+  if (!mitglied && !student) return 15;
+  if (!mitglied && student) return 12.5;
+  if (mitglied && !student) return 10;
+  if (mitglied && student) return 7.5;
   return 0;
 }
 
@@ -219,59 +208,96 @@ function anmeldebestätigung() {
     );
     return;
   }
-  if (isEmpty(rowValues[verifikationsIndex])) {
+  if (isEmpty(rowValues[verifikationsIndex - 1])) {
     SpreadsheetApp.getUi().alert("Email-Adresse nicht verifiziert");
     return;
   }
   if (!isEmpty(rowValues[anmeldebestIndex - 1])) {
-    SpreadsheetApp.getUi().alert("Die Reise wurde schon bestätigt");
+    SpreadsheetApp.getUi().alert("Der Kurs wurde schon bestätigt");
     return;
   }
   // setting up mail
   let emailTo: string = rowValues[mailIndex - 1];
   let subject: string = "Bestätigung Ihrer Buchung";
-  let einzeln: boolean = rowValues[einzelnIndex - 1].startsWith("Allein");
-  let herrFrau = einzeln
-    ? rowValues[herrFrauIndex - 1]
-    : rowValues[herrFrau1Index - 1];
-  let name = einzeln ? rowValues[nameIndex - 1] : rowValues[name1Index - 1];
-  // Anrede
+  let herrFrau = rowValues[herrFrauIndex - 1];
+  let name = rowValues[nameIndex - 1];
+  let mitglied = !isEmpty(rowValues[mitgliederNrIndex - 1]);
+  let student = rowValues[studentIndex - 1] === "Ja";
+
   let anrede: string = anredeText(herrFrau, name);
+  let kurs: string = rowValues[kurseIndex - 1];
+  let betrag: number = kursPreis(mitglied, student);
   let template: GoogleAppsScript.HTML.HtmlTemplate = HtmlService.createTemplateFromFile(
     "emailBestätigung.html"
   );
-
-  let reise: string = rowValues[tourIndexB - 1];
-
-  let betrag: number = tourPreis(einzeln, reise);
   template.anrede = anrede;
-  template.reise =
-    reise + (einzeln ? " für eine Person" : " für zwei Personen");
+  template.kursText = "den Kurs";
+  template.kurse = [kurs];
   template.betrag = betrag;
-
-  SpreadsheetApp.getUi().alert(
-    herrFrau +
-      " " +
-      name +
-      " bucht für die Reise '" +
-      reise +
-      "' ein " +
-      (einzeln ? "EZ" : "DZ") +
-      " für " +
-      betrag +
-      "Euro"
-  );
 
   let htmlText: string = template.evaluate().getContent();
   let textbody = "HTML only";
   let options = {
     htmlBody: htmlText,
-    name: "Mehrtagestouren ADFC München e.V.",
+    name: "Technikkurse ADFC München e.V.",
     replyTo: "michael.uhlenberg@adfc-muenchen.de",
   };
   GmailApp.sendEmail(emailTo, subject, textbody, options);
   // update sheet
   sheet.getRange(row, anmeldebestIndex).setValue(heuteString());
+}
+
+function anmeldebestätigungen(
+  buchungenMap: Map<string, number[]>,
+  buchungenVals: any[][]
+) {
+  let subject: string = "Bestätigung Ihrer Buchung";
+  for (let [emailTo, rows] of buchungenMap) {
+    let anrede: string;
+    let einzelBetrag = 0;
+    let betrag = 0;
+    let kurse: string[] = [];
+    for (let row of rows) {
+      let rowValues = buchungenVals[row];
+      if (einzelBetrag === 0) {
+        let herrFrau = rowValues[herrFrauIndex - 1];
+        let name = rowValues[nameIndex - 1];
+        let mitglied = !isEmpty(rowValues[mitgliederNrIndex - 1]);
+        let student = rowValues[studentIndex - 1] === "Ja";
+
+        anrede = anredeText(herrFrau, name);
+        let kurs: string = rowValues[kurseIndex - 1];
+        kurse.push(kurs);
+        einzelBetrag = kursPreis(mitglied, student);
+      }
+      betrag += einzelBetrag;
+    }
+    if (betrag === 0) continue;
+
+    // setting up mail
+    let template: GoogleAppsScript.HTML.HtmlTemplate = HtmlService.createTemplateFromFile(
+      "emailBestätigung.html"
+    );
+    template.anrede = anrede;
+    template.kursText = kurse.length == 1 ? "den Kurs" : "die Kurse";
+    template.kurse = kurse;
+    template.betrag = betrag;
+
+    let htmlText: string = template.evaluate().getContent();
+    let textbody = "HTML only";
+    let options = {
+      htmlBody: htmlText,
+      name: "Technikkurse ADFC München e.V.",
+      replyTo: "michael.uhlenberg@adfc-muenchen.de",
+    };
+    GmailApp.sendEmail(emailTo, subject, textbody, options);
+    // update sheet
+    for (let row of rows) {
+      buchungenSheet
+        .getRange(row + 2, anmeldebestIndex)
+        .setValue(heuteString());
+    }
+  }
 }
 
 function onOpen() {
@@ -280,7 +306,7 @@ function onOpen() {
   ui.createMenu("ADFC-MTT")
     .addItem("Anmeldebestätigung senden", "anmeldebestätigung")
     .addItem("Update", "update")
-    // .addItem("Test", "test")
+    .addItem("Test", "test")
     .addToUi();
 }
 
@@ -294,7 +320,6 @@ function dispatch(e: Event) {
   let range: GoogleAppsScript.Spreadsheet.Range = e.range;
   let sheet = range.getSheet();
   Logger.log("dispatch sheet", sheet.getName(), range.getA1Notation());
-  if (sheet.getName() == "Test") checkBuchung(e);
   if (sheet.getName() == "Buchungen") checkBuchung(e);
   if (sheet.getName() == "Email-Verifikation") verifyEmail();
 }
@@ -302,223 +327,78 @@ function dispatch(e: Event) {
 function verifyEmail() {
   let ssheet = SpreadsheetApp.getActiveSpreadsheet();
   let evSheet = ssheet.getSheetByName("Email-Verifikation");
-  if (evSheet.getLastRow() < 2) return;
-  // It is a big nuisance that getSheetValues with a row count of 0 throws an error, instead of returning an empty list.
+
+  let numRows = evSheet.getLastRow() - 1;
+  if (numRows < 1) return;
   let evalues = evSheet.getSheetValues(
     2,
     1,
-    evSheet.getLastRow() - 1,
-    evSheet.getLastColumn()
-  ); // Mit dieser Email-Adresse
-
-  let numRows = buchungenSheet.getLastRow();
-  if (numRows < 2) return;
-  let bvalues = buchungenSheet.getSheetValues(
-    2,
-    1,
-    numRows - 1,
-    buchungenSheet.getLastColumn()
+    numRows,
+    evSheet.getLastColumn() // = 3
   );
-  Logger.log("bvalues %s", bvalues);
 
-  for (let bx in bvalues) {
+  numRows = buchungenSheet.getLastRow() - 1;
+  if (numRows < 1) return;
+  let numCols = buchungenSheet.getLastColumn();
+  let buchungenVals = buchungenSheet.getSheetValues(2, 1, numRows, numCols);
+  Logger.log("buchungenVals %s", buchungenVals);
+
+  let buchungenNotes = buchungenSheet
+    .getRange(2, 1, numRows, numCols)
+    .getNotes();
+
+  let buchungenMap = new Map<string, number[]>();
+  for (let bx in buchungenVals) {
     let bxi = +bx; // confusingly, bx is initially a string, and is interpreted as A1Notation in sheet.getRange(bx) !
-    let brow = bvalues[bxi];
-    if (
-      !isEmpty(brow[mailIndex - 1]) &&
-      isEmpty(brow[verifikationsIndex - 1])
-    ) {
-      let baddr = brow[1];
-      for (let ex in evalues) {
-        let erow = evalues[ex];
-        if (erow[1] != "Ja" || isEmpty(erow[2])) continue;
-        let eaddr = erow[2];
-        if (eaddr != baddr) continue;
+    let brow = buchungenVals[bxi];
+    let baddr = (brow[mailIndex - 1] as string).toLowerCase();
+    if (isEmpty(baddr)) continue;
+    if (!isEmpty(buchungenNotes[bxi][0])) {
+      continue;
+    }
+    for (let ex in evalues) {
+      let erow = evalues[ex];
+      if (erow.length < 3) continue;
+      let eaddr = (erow[2] as string).toLowerCase();
+      if (eaddr != baddr) continue;
+      if (erow[1] != "Ja" || isEmpty(eaddr)) continue;
+      if (isEmpty(brow[verifikationsIndex - 1])) {
         // Buchungen[Verifiziert] = Email-Verif[Zeitstempel]
         buchungenSheet.getRange(bxi + 2, verifikationsIndex).setValue(erow[0]);
         brow[verifikationsIndex - 1] = erow[0];
-        break;
       }
-    }
-  }
-}
-
-function checkBuchung(e: Event) {
-  let keys = Object.keys(e);
-  Logger.log("checkBuch", keys, typeof e);
-  for (let key of keys) {
-    Logger.log("key %s val %s", key, e[key]);
-  }
-
-  let range: GoogleAppsScript.Spreadsheet.Range = e.range;
-  let sheet = range.getSheet();
-  let row = range.getRow();
-  let cellA = range.getCell(1, 1);
-  Logger.log("sheet %s row %s cellA %s", sheet, row, cellA.getA1Notation());
-
-  let ibanNV = e.namedValues["IBAN-Kontonummer"][0];
-  let iban = ibanNV.replace(/\s/g, "").toUpperCase();
-  let emailTo = e.namedValues["E-Mail-Adresse"][0];
-  Logger.log("iban=%s emailTo=%s %s", iban, emailTo, typeof emailTo);
-  if (!isValidIban(iban)) {
-    sendWrongIbanEmail(emailTo, iban);
-    cellA.setNote("Ungültige IBAN");
-    return;
-  }
-  if (iban != ibanNV) {
-    let cellIban = range.getCell(1, headers["Buchungen"]["IBAN-Kontonummer"]);
-    cellIban.setValue(iban);
-  }
-  // Die Zellen Zustimmung und Bestätigung sind im Formular als Pflichtantwort eingetragen
-  // und können garnicht anders als gesetzt sein. Sonst hier prüfen analog zu IBAN.
-
-  let einzeln = e.namedValues[einzelnFrage][0].startsWith("Alleine");
-  let personen = einzeln ? "einer Person" : "zwei Personen";
-  let restCol = einzeln
-    ? headers["Reisen"]["EZ-Rest"]
-    : headers["Reisen"]["DZ-Rest"];
-  let touren: Array<string> = [];
-  let tourenNV: Array<string> = e.namedValues[tourFrage];
-  // actually, tourenNV = e.g. ["tour1, tour2, tour3"], i.e. just one element
-  for (let tour of tourenNV) {
-    let tourenList = tour.split(","); // that's the reason why we don't want commas within a tour title!
-    for (let tlItem of tourenList) {
-      touren.push(tlItem.trim());
-    }
-  }
-  // Logger.log("check2", einzeln, personen, restCol, touren, touren.length);
-  if (touren.length == 0) {
-    Logger.log("check4");
-    // cannot happen, answer is mandatory
-    return;
-  }
-
-  // for each tour besides the first create a new row, and put the tour into it
-  let buchungsRowNumbers = [row];
-  if (touren.length > 1) {
-    let numCols = sheet.getLastColumn();
-    let tourCellNo = headers["Buchungen"][tourFrage];
-    for (let i = 1; i < touren.length; i++) {
-      let toRow = sheet.getLastRow() + 1;
-      if (toRow >= sheet.getMaxRows()) {
-        sheet.insertRowAfter(toRow);
-      }
-      let toRange = sheet.getRange(toRow, 1, 1, numCols);
-      range.copyTo(toRange);
-      let tourCell = toRange.getCell(1, tourCellNo);
-      tourCell.setValue(touren[i]);
-      buchungsRowNumbers.push(toRow);
-    }
-    // put the first tour into the original row
-    let tourCell = range.getCell(1, tourCellNo);
-    tourCell.setValue(touren[0]);
-  }
-
-  let msgs = [];
-  let reisen: Array<Array<string>> = reisenSheet.getSheetValues(
-    2,
-    1,
-    reisenSheet.getLastRow(),
-    reisenSheet.getLastColumn()
-  );
-  let restChanged = false;
-  for (let i = 0; i < touren.length; i++) {
-    let tourFound = false;
-    for (let j = 0; j < reisen.length; j++) {
-      if (reisen[j][0] == touren[i]) {
-        tourFound = true;
-        let rest = reisenSheet.getRange(2 + j, restCol).getValue();
-        if (rest <= 0) {
-          msgs.push(
-            "Die Reise '" +
-              touren[i] +
-              "' für " +
-              personen +
-              " ist leider ausgebucht."
-          );
-          sheet.getRange(buchungsRowNumbers[i], 1).setNote("Ausgebucht");
-        } else {
-          msgs.push(
-            "Sie sind für die Reise '" +
-              touren[i] +
-              "' für " +
-              personen +
-              " vorgemerkt."
-          );
-          reisenSheet.getRange(2 + j, restCol).setValue(rest - 1);
-          restChanged = true;
+      if (isEmpty(brow[anmeldebestIndex - 1])) {
+        let rows = buchungenMap.get(baddr);
+        if (rows == null) {
+          rows = [];
+          buchungenMap.set(baddr, rows);
         }
-        break;
-      }
-    }
-    if (!tourFound) {
-      Logger.log("tour '" + touren[i] + " nicht im Reisen-Sheet!?");
-    }
-  }
-  if (msgs.length == 0) {
-    Logger.log("keine Touren gefunden!?");
-    return;
-  }
-  if (restChanged) {
-    updateForm();
-  }
-  Logger.log("msgs: ", msgs, msgs.length);
-  sendeAntwort(e, msgs, sheet, buchungsRowNumbers);
-}
-
-function sendeAntwort(
-  e: Event,
-  msgs: Array<string>,
-  sheet: GoogleAppsScript.Spreadsheet.Sheet,
-  buchungsRowNumbers: Array<number>
-) {
-  let emailTo = e.namedValues["E-Mail-Adresse"][0];
-  Logger.log("emailTo=" + emailTo);
-
-  let templateFile = "emailVerif.html";
-
-  // do we already know this email address?
-  let ss = SpreadsheetApp.getActiveSpreadsheet();
-  let evSheet = ss.getSheetByName("Email-Verifikation");
-  let numRows = evSheet.getLastRow();
-  let evalues =
-    numRows < 2
-      ? []
-      : evSheet.getSheetValues(2, 1, evSheet.getLastRow() - 1, 3);
-  for (let i = 0; i < evalues.length; i++) {
-    // Mit dieser Email-Adresse
-    if (evalues[i][2] == emailTo) {
-      templateFile = "emailReply.html"; // yes, don't ask for verification
-      for (let j = 0; j < buchungsRowNumbers.length; j++) {
-        sheet
-          .getRange(buchungsRowNumbers[j], verifikationsIndex)
-          .setValue(evalues[i][0]);
+        rows.push(bxi);
       }
       break;
     }
   }
+  anmeldebestätigungen(buchungenMap, buchungenVals);
+}
 
-  let template: GoogleAppsScript.HTML.HtmlTemplate = HtmlService.createTemplateFromFile(
-    templateFile
-  );
-  template.anrede = anrede(e);
-  template.msgs = msgs;
-  template.verifLink =
-    "https://docs.google.com/forms/d/e/1FAIpQLScLF2jogdsQGOI_A4gvGVvmrasN6pS5MZgY7xvqSjMB87F6uw/viewform?usp=pp_url&entry.1398709542=Ja&entry.576071197=" +
-    encodeURIComponent(emailTo);
-
-  let htmlText: string = template.evaluate().getContent();
-  let subject =
-    templateFile === "emailVerif.html"
-      ? "Bestätigung Ihrer Email-Adresse"
-      : "Bestätigung Ihrer Anmeldung";
-  let textbody = "HTML only";
-  let options = {
-    htmlBody: htmlText,
-    name: "Mehrtagestouren ADFC München e.V.",
-    replyTo: "michael.uhlenberg@adfc-muenchen.de",
-  };
-  GmailApp.sendEmail(emailTo, subject, textbody, options);
+function isVerified(emailTo: string, buchungsRowNumbers: number[]): boolean {
+  // do we already know this email address?
+  let ss = SpreadsheetApp.getActiveSpreadsheet();
+  let evSheet = ss.getSheetByName("Email-Verifikation");
+  let numRows = evSheet.getLastRow() - 1;
+  let evalues = numRows < 1 ? [] : evSheet.getSheetValues(2, 1, numRows, 3);
+  for (let i = 0; i < evalues.length; i++) {
+    // Mit dieser Email-Adresse
+    if (evalues[i][2] == emailTo) {
+      for (let j = 0; j < buchungsRowNumbers.length; j++) {
+        buchungenSheet
+          .getRange(buchungsRowNumbers[j], verifikationsIndex)
+          .setValue(evalues[i][0]);
+      }
+      return true;
+    }
+  }
+  return false;
 }
 
 function anrede(e: Event) {
@@ -550,22 +430,199 @@ function anrede(e: Event) {
   return anrede + vorname + " " + name;
 }
 
+function checkBuchung(e: Event) {
+  let keys = Object.keys(e);
+  Logger.log("checkBuch", keys, typeof e);
+  for (let key of keys) {
+    Logger.log("key %s val %s", key, e[key]);
+  }
+
+  let range: GoogleAppsScript.Spreadsheet.Range = e.range;
+  let sheet = range.getSheet();
+  let row = range.getRow();
+  let cellA = range.getCell(1, 1);
+  Logger.log("sheet %s row %s cellA %s", sheet, row, cellA.getA1Notation());
+
+  let ibanNV = e.namedValues["IBAN-Kontonummer"][0];
+  let iban = ibanNV.replace(/\s/g, "").toUpperCase();
+  let emailTo = e.namedValues["E-Mail-Adresse"][0];
+  let anredeE = anrede(e);
+  let mitglied = !isEmpty(e.namedValues["ADFC-Mitgliedsnummer"][0]);
+  let student = e.namedValues["Studieren Sie?"][0] === "Ja";
+  Logger.log(
+    "iban=%s emailTo=%s Anrede %s Mitglied %s Student %s",
+    iban,
+    emailTo,
+    anredeE,
+    mitglied,
+    student
+  );
+  if (!isValidIban(iban)) {
+    sendWrongIbanEmail(emailTo, anredeE, iban);
+    cellA.setNote("Ungültige IBAN");
+    return;
+  }
+  if (iban != ibanNV) {
+    let cellIban = range.getCell(1, headers["Buchungen"]["IBAN-Kontonummer"]);
+    cellIban.setValue(iban);
+  }
+  // Die Zellen Zustimmung und Bestätigung sind im Formular als Pflichtantwort eingetragen
+  // und können garnicht anders als gesetzt sein. Sonst hier prüfen analog zu IBAN.
+
+  let kurse: Array<string> = [];
+  let kurseNV: Array<string> = e.namedValues[kursFrage];
+  // actually, kurseNV = e.g. ["kurs1, kurs2, kurs3"], i.e. just one element
+  for (let kurs of kurseNV) {
+    let kurseList = kurs.split(","); // that's the reason why we don't want commas within a kurs title!
+    for (let tlItem of kurseList) {
+      kurse.push(tlItem.trim());
+    }
+  }
+  // Logger.log("check2", einzeln, personen, restPlätzeIndex, kurse, kurse.length);
+  if (kurse.length == 0) {
+    Logger.log("check4");
+    // cannot happen, answer is mandatory
+    return;
+  }
+
+  // for each kurs besides the first create a new row, and put the kurs into it
+  let buchungsRowNumbers = [row];
+  if (kurse.length > 1) {
+    let numCols = sheet.getLastColumn();
+    let kursCellNo = headers["Buchungen"][kursFrage];
+    for (let i = 1; i < kurse.length; i++) {
+      let toRow = sheet.getLastRow() + 1;
+      if (toRow >= sheet.getMaxRows()) {
+        sheet.insertRowAfter(toRow);
+      }
+      let toRange = sheet.getRange(toRow, 1, 1, numCols);
+      range.copyTo(toRange);
+      let kursCell = toRange.getCell(1, kursCellNo);
+      kursCell.setValue(kurse[i]);
+      buchungsRowNumbers.push(toRow);
+    }
+    // put the first kurs into the original row
+    let kursCell = range.getCell(1, kursCellNo);
+    kursCell.setValue(kurse[0]);
+  }
+
+  let verified = isVerified(emailTo, buchungsRowNumbers);
+  let msgs = [];
+  let kurseVals: Array<Array<string | Date>> = kurseSheet.getSheetValues(
+    2,
+    1,
+    kurseSheet.getLastRow(),
+    kurseSheet.getLastColumn()
+  );
+  let restChanged = false;
+  let betrag = 0;
+  let einzelPreis = kursPreis(mitglied, student);
+  for (let i = 0; i < kurse.length; i++) {
+    let kursFound = false;
+    for (let j = 0; j < kurseVals.length; j++) {
+      let kurs = kursNTD(
+        kurseVals[j][kursNummerIndex - 1] as string,
+        kurseVals[j][kursTitelIndex - 1] as string,
+        date2Str(kurseVals[j][kursDatumIndex - 1] as Date)
+      );
+      if (kurs === kurse[i]) {
+        kursFound = true;
+        let rest = kurseSheet.getRange(2 + j, restPlätzeIndex).getValue();
+        if (rest <= 0) {
+          msgs.push("Der Kurs '" + kurs + "' ist leider ausgebucht.");
+          sheet.getRange(buchungsRowNumbers[i], 1).setNote("Ausgebucht");
+        } else {
+          msgs.push(
+            "Sie sind für den Kurs '" +
+              kurs +
+              (verified ? "' gebucht." : "' vorgemerkt.")
+          );
+          kurseSheet.getRange(2 + j, restPlätzeIndex).setValue(rest - 1);
+          restChanged = true;
+          betrag += einzelPreis;
+        }
+        break;
+      }
+    }
+    if (!kursFound) {
+      Logger.log("Kurs '" + kurse[i] + " nicht im Kurse-Sheet!?");
+    }
+  }
+  if (msgs.length == 0) {
+    Logger.log("keine Kurse gefunden!?");
+    return;
+  }
+  if (restChanged) {
+    updateForm();
+  }
+  Logger.log("msgs: ", msgs, msgs.length);
+  sendeAntwort(emailTo, verified, anredeE, betrag, msgs);
+  if (verified) {
+    let heute = heuteString();
+    for (let row of buchungsRowNumbers) {
+      sheet.getRange(row, anmeldebestIndex).setValue(heute);
+    }
+  }
+}
+
+function sendeAntwort(
+  emailTo: string,
+  verified: boolean,
+  anredeE: string,
+  betrag: number,
+  msgs: Array<string>
+) {
+  Logger.log("emailTo=" + emailTo);
+
+  let templateFile = verified ? "emailBestätigung.html" : "emailVerif.html";
+  let template: GoogleAppsScript.HTML.HtmlTemplate = HtmlService.createTemplateFromFile(
+    templateFile
+  );
+  template.anrede = anredeE;
+  template.msgs = msgs;
+  template.betrag = betrag;
+  template.verifLink =
+    "https://docs.google.com/forms/d/e/1FAIpQLSeEcceEKaHoGzwdw2qJlu0fpAKkhECG5CnQhi1jVXOcwt-6sw/viewform?usp=pp_url&entry.1398709542=Ja&entry.576071197=" +
+    encodeURIComponent(emailTo);
+
+  let htmlText: string = template.evaluate().getContent();
+  let subject = verified
+    ? "Bestätigung Ihrer Anmeldung"
+    : "Bestätigung Ihrer Email-Adresse";
+  let textbody = "HTML only";
+  let options = {
+    htmlBody: htmlText,
+    name: "Mehrtageskurse ADFC München e.V.",
+    replyTo: "michael.uhlenberg@adfc-muenchen.de",
+  };
+  GmailApp.sendEmail(emailTo, subject, textbody, options);
+}
+
 function update() {
   if (!inited) init();
   verifyEmail();
-  updateZimmerReste();
+  updateKursReste();
   updateForm();
 }
 
-function updateZimmerReste() {
-  let reisenRows = reisenSheet.getLastRow() - 1; // first row = headers
-  let reisenCols = reisenSheet.getLastColumn();
-  let reisenVals = reisenSheet
-    .getRange(2, 1, reisenRows, reisenCols)
-    .getValues();
-  let reisenNotes = reisenSheet
-    .getRange(2, 1, reisenRows, reisenCols)
-    .getNotes();
+function date2Str(ddate: Date): string {
+  let sdate: string = Utilities.formatDate(
+    ddate,
+    SpreadsheetApp.getActive().getSpreadsheetTimeZone(),
+    "dd.MM.YYYY"
+  );
+  return sdate;
+}
+
+function kursNTD(kursNummer: string, kursTitel: string, kursDatum: string) {
+  return kursNummer + ": " + kursTitel + " am " + kursDatum;
+}
+
+function updateKursReste() {
+  let kurseRows = kurseSheet.getLastRow() - 1; // first row = headers
+  let kurseCols = kurseSheet.getLastColumn();
+  let kurseVals = kurseSheet.getRange(2, 1, kurseRows, kurseCols).getValues();
+  let kurseNotes = kurseSheet.getRange(2, 1, kurseRows, kurseCols).getNotes();
 
   let buchungenRows = buchungenSheet.getLastRow() - 1; // first row = headers
   let buchungenCols = buchungenSheet.getLastColumn();
@@ -584,72 +641,43 @@ function updateZimmerReste() {
       .getNotes();
   }
 
-  let ezimmer: MapS2I = {};
-  let dzimmer: MapS2I = {};
+  let kursplätze: MapS2I = {};
   for (let b = 0; b < buchungenRows; b++) {
     if (!isEmpty(buchungenNotes[b][0])) continue;
-    let tour = buchungenVals[b][tourIndexB - 1];
-    let einzeln = buchungenVals[b][einzelnIndex - 1].startsWith("Alleine");
-    let zimmer = einzeln ? ezimmer : dzimmer;
-    let anzahl: number = zimmer[tour];
+    let kurs = buchungenVals[b][kurseIndex - 1];
+    let anzahl: number = kursplätze[kurs];
     if (anzahl == null) {
-      zimmer[tour] = 1;
+      kursplätze[kurs] = 1;
     } else {
-      zimmer[tour] = anzahl + 1;
+      kursplätze[kurs] = anzahl + 1;
     }
   }
 
-  let tourIndexR = headers["Reisen"]["Reise"];
-  let dzAnzahlIndex = headers["Reisen"]["DZ-Anzahl"];
-  let ezAnzahlIndex = headers["Reisen"]["EZ-Anzahl"];
-  let dzRestIndex = headers["Reisen"]["DZ-Rest"];
-  let ezRestIndex = headers["Reisen"]["EZ-Rest"];
-  for (let r = 0; r < reisenRows; r++) {
-    if (!isEmpty(reisenNotes[r][0])) continue;
-    let tour = reisenVals[r][tourIndexR - 1];
-    let dzAnzahl: number = reisenVals[r][dzAnzahlIndex - 1];
-    let ezAnzahl: number = reisenVals[r][ezAnzahlIndex - 1];
-    let dzGebucht: number = dzimmer[tour];
-    let ezGebucht: number = ezimmer[tour];
-    if (dzGebucht == null) dzGebucht = 0;
-    if (ezGebucht == null) ezGebucht = 0;
-    let dzRest: number = dzAnzahl - dzGebucht;
-    let ezRest: number = ezAnzahl - ezGebucht;
-    if (dzRest < 0) {
-      SpreadsheetApp.getUi().alert(
-        "DZ der Reise '" + tour + "' sind überbucht!"
-      );
-      dzRest = 0;
+  for (let r = 0; r < kurseRows; r++) {
+    if (!isEmpty(kurseNotes[r][0])) continue;
+    let kursNummer: string = kurseVals[r][kursNummerIndex - 1];
+    let kursTitel: string = kurseVals[r][kursTitelIndex - 1];
+    let kursDatum: Date = kurseVals[r][kursDatumIndex - 1];
+    let kursPlätze: number = kurseVals[r][kursPlätzeIndex - 1];
+    let restPlätze: number = kurseVals[r][restPlätzeIndex - 1];
+    let kurs = kursNTD(kursNummer, kursTitel, date2Str(kursDatum));
+
+    let kursGebucht: number = kursplätze[kurs];
+    if (kursGebucht == null) kursGebucht = 0;
+    let kursRest: number = kursPlätze - kursGebucht;
+    if (kursRest < 0) {
+      SpreadsheetApp.getUi().alert("Der Kurs '" + kurs + "' ist überbucht!");
+      kursRest = 0;
     }
-    if (ezRest < 0) {
+    if (kursRest !== restPlätze) {
+      kurseSheet.getRange(2 + r, restPlätzeIndex).setValue(kursRest);
       SpreadsheetApp.getUi().alert(
-        "EZ der Reise '" + tour + "' sind überbucht!"
-      );
-      ezRest = 0;
-    }
-    let dzRestR: number = reisenVals[r][dzRestIndex - 1];
-    if (dzRest !== dzRestR) {
-      reisenSheet.getRange(2 + r, dzRestIndex).setValue(dzRest);
-      SpreadsheetApp.getUi().alert(
-        "DZ-Rest der Reise '" +
-          tour +
+        "Restplätze des Kurs '" +
+          kurs +
           "' von " +
-          dzRestR +
+          restPlätze +
           " auf " +
-          dzRest +
-          " geändert!"
-      );
-    }
-    let ezRestR: number = reisenVals[r][ezRestIndex - 1];
-    if (ezRest !== ezRestR) {
-      reisenSheet.getRange(2 + r, ezRestIndex).setValue(ezRest);
-      SpreadsheetApp.getUi().alert(
-        "EZ-Rest der Reise '" +
-          tour +
-          "' von " +
-          ezRestR +
-          " auf " +
-          ezRest +
+          kursRest +
           " geändert!"
       );
     }
@@ -657,89 +685,84 @@ function updateZimmerReste() {
 }
 
 function updateForm() {
-  let reisenHdrs = headers["Reisen"];
-  let reisenRows = reisenSheet.getLastRow() - 1; // first row = headers
-  let reisenCols = reisenSheet.getLastColumn();
-  let reisenVals = reisenSheet
-    .getRange(2, 1, reisenRows, reisenCols)
-    .getValues();
-  let reisenNotes = reisenSheet
-    .getRange(2, 1, reisenRows, reisenCols)
-    .getNotes();
-  // Logger.log("reisen %s %s", reisenVals.length, reisenVals);
-  let reisenObjs = [];
-  for (let i = 0; i < reisenVals.length; i++) {
-    if (!isEmpty(reisenNotes[i][0])) continue;
-    let reisenObj: MapS2S = {};
-    for (let hdr in reisenHdrs) {
-      let idx = reisenHdrs[hdr];
-      // Logger.log("hdr %s %s", hdr, idx);
-      reisenObj[hdr] = reisenVals[i][idx - 1];
+  let kurseHdrs = headers["Kurse"];
+  let kurseRows = kurseSheet.getLastRow() - 1; // first row = headers
+  let kurseCols = kurseSheet.getLastColumn();
+  let kurseVals = kurseSheet.getRange(2, 1, kurseRows, kurseCols).getValues();
+  let kurseNotes = kurseSheet.getRange(2, 1, kurseRows, kurseCols).getNotes();
+  // Logger.log("kurse %s %s", kurseVals.length, kurseVals);
+  let kurseObjs = [];
+  for (let i = 0; i < kurseVals.length; i++) {
+    if (!isEmpty(kurseNotes[i][0])) continue;
+    let kursObj: MapS2S = {};
+    for (let hdr in kurseHdrs) {
+      let idx = kurseHdrs[hdr];
+      Logger.log("hdr %s %s", hdr, idx);
+      if (hdr == "Kursdatum") {
+        kursObj[hdr] = date2Str(kurseVals[i][idx - 1]);
+      } else {
+        kursObj[hdr] = kurseVals[i][idx - 1];
+      }
     }
     let ok = true;
-    // check if all cells of Reise row are nonempty
-    for (let hdr in reisenHdrs) {
-      if (isEmpty(reisenObj[hdr])) ok = false;
+    // check if all cells of Kurs row are nonempty
+    for (let hdr in kurseHdrs) {
+      if (isEmpty(kursObj[hdr])) ok = false;
     }
     if (ok) {
-      ok = +reisenObj["DZ-Rest"] > 0 || +reisenObj["EZ-Rest"] > 0;
+      ok = +kursObj["Restplätze"] > 0;
     }
-    if (ok) reisenObjs.push(reisenObj);
+    if (ok) kurseObjs.push(kursObj);
   }
-  Logger.log("reisenObjs=%s", reisenObjs);
+  Logger.log("kurseObjs=%s", kurseObjs);
 
   let ss = SpreadsheetApp.getActiveSpreadsheet();
   let formUrl = ss.getFormUrl();
   // Logger.log("formUrl2 %s", formUrl);
   let form: GoogleAppsScript.Forms.Form = FormApp.openByUrl(formUrl);
   let items = form.getItems();
-  let reisenItem: GoogleAppsScript.Forms.CheckboxItem = null;
+  let kurseItem: GoogleAppsScript.Forms.CheckboxItem = null;
   for (let item of items) {
     //   let itemType = item.getType();
     //   Logger.log("title %s it %s %s", item.getTitle(), itemType, item.getIndex());
-    if (item.getTitle() === tourFrage) {
-      reisenItem = item.asCheckboxItem();
+    if (item.getTitle() === kursFrage) {
+      kurseItem = item.asCheckboxItem();
       break;
     }
   }
-  if (reisenItem == null) {
+  if (kurseItem == null) {
     SpreadsheetApp.getUi().alert(
-      'Das Formular hat keine Frage "Bei welchen Touren ...?"'
+      'Das Formular hat keine Frage "' + kursFrage + '"!'
     );
     return;
   }
   let choices = [];
   let descs = [];
-  for (let reiseObj of reisenObjs) {
-    let mr: string = reiseObj["Reise"];
+  for (let kursObj of kurseObjs) {
+    let mr: string = kursNTD(
+      kursObj["Kursnummer"],
+      kursObj["Kurstitel"],
+      kursObj["Kursdatum"]
+    );
     mr = mr.replace(",", ""); // mehrere Buchungen werden durch Komma getrennt, s.o.
-    let desc =
-      mr +
-      ", EZ " +
-      reiseObj["EZ-Preis"] +
-      "€, " +
-      reiseObj["EZ-Rest"] +
-      " frei, DZ " +
-      reiseObj["DZ-Preis"] +
-      "€, " +
-      reiseObj["DZ-Rest"] +
-      " frei";
+    let desc = mr + ", freie Plätze: " + kursObj["Restplätze"];
     Logger.log("mr %s desc %s", mr, desc);
     descs.push(desc);
-    let choice = reisenItem.createChoice(mr);
+    let choice = kurseItem.createChoice(mr);
     choices.push(choice);
   }
   let beschreibung =
-    "Sie können eine oder mehrere Touren ankreuzen.\nBitte beachten Sie die Anzahl noch freier Zimmer!\n" +
+    "Sie können einen oder mehrere Kurse ankreuzen. Bitte beachten Sie die Anzahl noch freier Plätze!\n\n" +
     descs.join("\n");
-  reisenItem.setHelpText(beschreibung);
-  reisenItem.setChoices(choices);
+  kurseItem.setHelpText(beschreibung);
+  kurseItem.setChoices(choices);
 }
 
-function sendWrongIbanEmail(empfaenger: string, iban: string) {
+function sendWrongIbanEmail(empfaenger: string, anrede: string, iban: string) {
   var subject = "Falsche IBAN";
   var body =
-    "Die von Ihnen bei der Buchung von ADFC Mehrtagestouren übermittelte IBAN " +
+    anrede +
+    ",\nDie von Ihnen bei der Buchung von ADFC Technikkurse übermittelte IBAN " +
     iban +
     " ist leider falsch! Bitte wiederholen Sie die Buchung mit einer korrekten IBAN.";
   GmailApp.sendEmail(empfaenger, subject, body);
