@@ -5,15 +5,17 @@
   </head>
   <body>
     <p>
-      <?= anrede ?>,<br /><br />
-      hiermit bestätigen wir Ihnen, daß Sie für <?= kursText ?> <br />
+      <?= anrede ?>,<br />
+      hiermit möchten wir Ihnen mitteilen:<br />
       <? for (let kurs of kurse) { ?>
         <p>
           <?= kurs ?>
         </p>
-      <? } ?>  
-      angemeldet sind. Der Betrag von
-      <?= betrag ?>€ wird per Lastschrift abgebucht.<br/> 
+      <? } ?>
+      <? if (betrag > 0) { ?>  
+      Der Betrag von
+      <?= betrag ?>€ wird vor Kursbeginn per Lastschrift abgebucht.<br/>
+      <? } ?> 
       Mit freundlichen Grüßen,<br />
       <br />
       Technikkurse Allgemeiner Deutscher Fahrrad-Club München e.V.<br />

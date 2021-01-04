@@ -178,6 +178,7 @@ function kursPreis(mitglied: boolean, student: boolean) {
 }
 
 function anmeldebestätigung() {
+  Logger.log("anmeldebestätigung");
   if (!inited) init();
   let sheet = SpreadsheetApp.getActiveSheet();
   if (sheet.getName() != "Buchungen") {
@@ -231,8 +232,7 @@ function anmeldebestätigung() {
     "emailBestätigung.html"
   );
   template.anrede = anrede;
-  template.kursText = "den Kurs";
-  template.kurse = [kurs];
+  template.kurse = ["Sie sind für den Kurs '" + kurs + "' angemeldet."];
   template.betrag = betrag;
 
   let htmlText: string = template.evaluate().getContent();
@@ -251,6 +251,7 @@ function anmeldebestätigungen(
   buchungenMap: Map<string, number[]>,
   buchungenVals: any[][]
 ) {
+  Logger.log("anmeldebestätigungen");
   let subject: string = "Bestätigung Ihrer Buchung";
   for (let [emailTo, rows] of buchungenMap) {
     let anrede: string;
@@ -264,12 +265,11 @@ function anmeldebestätigungen(
         let name = rowValues[nameIndex - 1];
         let mitglied = !isEmpty(rowValues[mitgliederNrIndex - 1]);
         let student = rowValues[studentIndex - 1] === "Ja";
-
         anrede = anredeText(herrFrau, name);
-        let kurs: string = rowValues[kurseIndex - 1];
-        kurse.push(kurs);
         einzelBetrag = kursPreis(mitglied, student);
       }
+      let kurs: string = rowValues[kurseIndex - 1];
+      kurse.push("Sie sind für den Kurs '" + kurs + "' angemeldet.");
       betrag += einzelBetrag;
     }
     if (betrag === 0) continue;
@@ -279,7 +279,6 @@ function anmeldebestätigungen(
       "emailBestätigung.html"
     );
     template.anrede = anrede;
-    template.kursText = kurse.length == 1 ? "den Kurs" : "die Kurse";
     template.kurse = kurse;
     template.betrag = betrag;
 
@@ -325,6 +324,7 @@ function dispatch(e: Event) {
 }
 
 function verifyEmail() {
+  Logger.log("verifyEmail");
   let ssheet = SpreadsheetApp.getActiveSpreadsheet();
   let evSheet = ssheet.getSheetByName("Email-Verifikation");
 
@@ -386,18 +386,23 @@ function isVerified(emailTo: string, buchungsRowNumbers: number[]): boolean {
   let ss = SpreadsheetApp.getActiveSpreadsheet();
   let evSheet = ss.getSheetByName("Email-Verifikation");
   let numRows = evSheet.getLastRow() - 1;
-  let evalues = numRows < 1 ? [] : evSheet.getSheetValues(2, 1, numRows, 3);
+  if (numRows < 1) return false;
+  let evalues = evSheet.getSheetValues(2, 1, numRows, 3);
+  emailTo = emailTo.toLowerCase();
   for (let i = 0; i < evalues.length; i++) {
+    if (evalues[i].length < 3) continue;
     // Mit dieser Email-Adresse
-    if (evalues[i][2] == emailTo) {
+    if ((evalues[i][2] as string).toLowerCase() == emailTo) {
       for (let j = 0; j < buchungsRowNumbers.length; j++) {
         buchungenSheet
           .getRange(buchungsRowNumbers[j], verifikationsIndex)
           .setValue(evalues[i][0]);
       }
+      Logger.log("verifyEmail returns true");
       return true;
     }
   }
+  Logger.log("verifyEmail returns false");
   return false;
 }
 
@@ -431,12 +436,7 @@ function anrede(e: Event) {
 }
 
 function checkBuchung(e: Event) {
-  let keys = Object.keys(e);
-  Logger.log("checkBuch", keys, typeof e);
-  for (let key of keys) {
-    Logger.log("key %s val %s", key, e[key]);
-  }
-
+  Logger.log("checkBuchung");
   let range: GoogleAppsScript.Spreadsheet.Range = e.range;
   let sheet = range.getSheet();
   let row = range.getRow();
@@ -535,7 +535,7 @@ function checkBuchung(e: Event) {
           msgs.push(
             "Sie sind für den Kurs '" +
               kurs +
-              (verified ? "' gebucht." : "' vorgemerkt.")
+              (verified ? "' angemeldet." : "' vorgemerkt.")
           );
           kurseSheet.getRange(2 + j, restPlätzeIndex).setValue(rest - 1);
           restChanged = true;
@@ -572,14 +572,14 @@ function sendeAntwort(
   betrag: number,
   msgs: Array<string>
 ) {
-  Logger.log("emailTo=" + emailTo);
+  Logger.log("sendeAntwort emailTo=", emailTo);
 
   let templateFile = verified ? "emailBestätigung.html" : "emailVerif.html";
   let template: GoogleAppsScript.HTML.HtmlTemplate = HtmlService.createTemplateFromFile(
     templateFile
   );
   template.anrede = anredeE;
-  template.msgs = msgs;
+  template.kurse = msgs;
   template.betrag = betrag;
   template.verifLink =
     "https://docs.google.com/forms/d/e/1FAIpQLSeEcceEKaHoGzwdw2qJlu0fpAKkhECG5CnQhi1jVXOcwt-6sw/viewform?usp=pp_url&entry.1398709542=Ja&entry.576071197=" +
@@ -697,7 +697,6 @@ function updateForm() {
     let kursObj: MapS2S = {};
     for (let hdr in kurseHdrs) {
       let idx = kurseHdrs[hdr];
-      Logger.log("hdr %s %s", hdr, idx);
       if (hdr == "Kursdatum") {
         kursObj[hdr] = date2Str(kurseVals[i][idx - 1]);
       } else {
@@ -707,7 +706,10 @@ function updateForm() {
     let ok = true;
     // check if all cells of Kurs row are nonempty
     for (let hdr in kurseHdrs) {
-      if (isEmpty(kursObj[hdr])) ok = false;
+      if (isEmpty(kursObj[hdr])) {
+        Logger.log("In Kurse Zeile mit leerem Feld ", hdr);
+        ok = false;
+      }
     }
     if (ok) {
       ok = +kursObj["Restplätze"] > 0;
@@ -746,7 +748,7 @@ function updateForm() {
     );
     mr = mr.replace(",", ""); // mehrere Buchungen werden durch Komma getrennt, s.o.
     let desc = mr + ", freie Plätze: " + kursObj["Restplätze"];
-    Logger.log("mr %s desc %s", mr, desc);
+    // Logger.log("desc %s", desc);
     descs.push(desc);
     let choice = kurseItem.createChoice(mr);
     choices.push(choice);
@@ -759,6 +761,7 @@ function updateForm() {
 }
 
 function sendWrongIbanEmail(empfaenger: string, anrede: string, iban: string) {
+  Logger.log("sendWrongIbanEmail");
   var subject = "Falsche IBAN";
   var body =
     anrede +
