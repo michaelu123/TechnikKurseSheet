@@ -1,4 +1,4 @@
-# Tabellen, Formulare und Skripten für die ADFC Technikkurse
+# Tabellen, Formulare und Skripten für die ADFC München Technikkurse
 
 ## Links
 
@@ -49,7 +49,7 @@ Das Skript ist in Typescript programmiert (Endung .ts). Durch "flask push" wird 
 
 Über die "onOpen"-Funktion wird im Backend ein Menü-Eintrag ADFC-TK erzeugt, mit den Menüpunkten "Anmeldebestätigung senden" und "Update". Die Anmeldebestätigung wird aber normalerweise automatisch verschickt. Wenn das nicht geklappt haben sollte, kann man eine Zeile im Buchungen-Sheet wählen und sendet dann die Anmeldebestätigung für diesen Kurs.
 
-Update kann man aufrufen, wenn man in Buchungen oder Kurse irgendwelche Änderungen durchgeführt hat, wie z.B. Stornierungen oder neue Kurse. Damit wird für alle Reisen die Anzahl der freien Plätze gleich der Anzahl verfügbarer Plätze minus die Anzahl gebuchter Plätze gesetzt, und das Formular upgedatet (geupdatet?). Der Aufrufer wird über jede Änderung informiert, um Überraschungen vorzubeugen. Vor allem wird auch vor Überbuchungen gewarnt (Zahl freier Plätze < 0), die durch Manipulation der Tabellen entstehen könnten.
+Update kann man aufrufen, wenn man in Buchungen oder Kurse irgendwelche Änderungen durchgeführt hat, wie z.B. Stornierungen oder neue Kurse. Damit wird für alle Kurse die Anzahl der freien Plätze gleich der Anzahl verfügbarer Plätze minus die Anzahl gebuchter Plätze gesetzt, und das Formular upgedatet (geupdatet?). Der Aufrufer wird über jede Änderung informiert, um Überraschungen vorzubeugen. Vor allem wird auch vor Überbuchungen gewarnt (Zahl freier Plätze < 0), die durch Manipulation der Tabellen entstehen könnten.
 
 ### Mehrfachbuchungen
 
