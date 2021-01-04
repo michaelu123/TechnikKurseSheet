@@ -24,6 +24,7 @@ let bestätigungsIndex: number; // Bestätigung (der Teilnahmebedingungen)
 let verifikationsIndex: number; // Verifikation (der Email-Adresse)
 let anmeldebestIndex: number; // Anmeldebestätigung (gesendet)
 let kurseIndex: number; // Welche Kurse möchten Sie belegen?
+let bezahltIndex: number; // Bezahlt
 
 // Kurse:
 let kursNummerIndex: number; // Kursnummer
@@ -31,6 +32,16 @@ let kursTitelIndex: number; // Kurstitel
 let kursDatumIndex: number; // Kursdatum
 let kursPlätzeIndex: number; // Kursplätze
 let restPlätzeIndex: number; // Restplätze
+
+// map Buchungen headers to print headers
+let printCols = new Map([
+  ["Vorname", "Vorname"],
+  ["Name", "Nachname"],
+  ["ADFC-Mitgliedsnummer", "Mitglied"],
+  ["Studieren Sie?", "Student"],
+  ["Anmeldebestätigung", "Bestätigt"],
+  ["Bezahlt", "Bezahlt"],
+]);
 
 const kursFrage = "Welche Kurse möchten Sie belegen?";
 
@@ -104,14 +115,18 @@ function init() {
       herrFrauIndex = sheetHeaders["Anrede"];
       nameIndex = sheetHeaders["Name"];
       bestätigungsIndex = sheetHeaders["Bestätigung"];
-      verifikationsIndex = sheetHeaders["Verifikation"];
       kurseIndex = sheetHeaders[kursFrage];
+      verifikationsIndex = sheetHeaders["Verifikation"];
       if (verifikationsIndex == null) {
         verifikationsIndex = addColumn(sheet, sheetHeaders, "Verifikation");
       }
       anmeldebestIndex = sheetHeaders["Anmeldebestätigung"];
       if (anmeldebestIndex == null) {
         anmeldebestIndex = addColumn(sheet, sheetHeaders, "Anmeldebestätigung");
+      }
+      bezahltIndex = sheetHeaders["Bezahlt"];
+      if (bezahltIndex == null) {
+        bezahltIndex = addColumn(sheet, sheetHeaders, "Bezahlt");
       }
     }
   }
@@ -303,9 +318,10 @@ function onOpen() {
   let ui = SpreadsheetApp.getUi();
   // Or DocumentApp or FormApp.
   ui.createMenu("ADFC-TK")
+    // .addItem("Test", "test")
     .addItem("Anmeldebestätigung senden", "anmeldebestätigung")
     .addItem("Update", "update")
-    .addItem("Test", "test")
+    .addItem("Kursteilnehmer drucken", "printKursMembers")
     .addToUi();
 }
 
@@ -343,9 +359,7 @@ function verifyEmail() {
   let buchungenVals = buchungenSheet.getSheetValues(2, 1, numRows, numCols);
   Logger.log("buchungenVals %s", buchungenVals);
 
-  let buchungenNotes = buchungenSheet
-    .getRange(2, 1, numRows, numCols)
-    .getNotes();
+  let buchungenNotes = buchungenSheet.getRange(2, 1, numRows, 1).getNotes();
 
   let buchungenMap = new Map<string, number[]>();
   for (let bx in buchungenVals) {
@@ -622,7 +636,7 @@ function updateKursReste() {
   let kurseRows = kurseSheet.getLastRow() - 1; // first row = headers
   let kurseCols = kurseSheet.getLastColumn();
   let kurseVals = kurseSheet.getRange(2, 1, kurseRows, kurseCols).getValues();
-  let kurseNotes = kurseSheet.getRange(2, 1, kurseRows, kurseCols).getNotes();
+  let kurseNotes = kurseSheet.getRange(2, 1, kurseRows, 1).getNotes();
 
   let buchungenRows = buchungenSheet.getLastRow() - 1; // first row = headers
   let buchungenCols = buchungenSheet.getLastColumn();
@@ -636,9 +650,7 @@ function updateKursReste() {
     buchungenVals = buchungenSheet
       .getRange(2, 1, buchungenRows, buchungenCols)
       .getValues();
-    buchungenNotes = buchungenSheet
-      .getRange(2, 1, buchungenRows, buchungenCols)
-      .getNotes();
+    buchungenNotes = buchungenSheet.getRange(2, 1, buchungenRows, 1).getNotes();
   }
 
   let kursplätze: MapS2I = {};
@@ -689,7 +701,7 @@ function updateForm() {
   let kurseRows = kurseSheet.getLastRow() - 1; // first row = headers
   let kurseCols = kurseSheet.getLastColumn();
   let kurseVals = kurseSheet.getRange(2, 1, kurseRows, kurseCols).getValues();
-  let kurseNotes = kurseSheet.getRange(2, 1, kurseRows, kurseCols).getNotes();
+  let kurseNotes = kurseSheet.getRange(2, 1, kurseRows, 1).getNotes();
   // Logger.log("kurse %s %s", kurseVals.length, kurseVals);
   let kurseObjs = [];
   for (let i = 0; i < kurseVals.length; i++) {
@@ -762,8 +774,8 @@ function updateForm() {
 
 function sendWrongIbanEmail(empfaenger: string, anrede: string, iban: string) {
   Logger.log("sendWrongIbanEmail");
-  var subject = "Falsche IBAN";
-  var body =
+  let subject = "Falsche IBAN";
+  let body =
     anrede +
     ",\nDie von Ihnen bei der Buchung von ADFC Technikkurse übermittelte IBAN " +
     iban +
@@ -849,4 +861,145 @@ function isValidIban(iban: string) {
   s = s.substr(15);
   for (; s; s = s.substr(13)) m = +("" + m + s.substr(0, 13)) % 97;
   return m == 1;
+}
+
+function printKursMembers() {
+  Logger.log("printKursMembers");
+  if (!inited) init();
+  let sheet = SpreadsheetApp.getActiveSheet();
+  if (sheet.getName() != "Kurse") {
+    SpreadsheetApp.getUi().alert(
+      "Bitte eine Zeile im Sheet 'Kurse' selektieren"
+    );
+    return;
+  }
+  let curCell = sheet.getSelection().getCurrentCell();
+  if (!curCell) {
+    SpreadsheetApp.getUi().alert(
+      "Bitte zuerst eine Zeile im Sheet 'Kurse' selektieren"
+    );
+    return;
+  }
+  let row = curCell.getRow();
+  if (row < 2 || row > sheet.getLastRow()) {
+    SpreadsheetApp.getUi().alert(
+      "Die ausgewählte Zeile ist ungültig, bitte zuerst Kurszeile selektieren"
+    );
+    return;
+  }
+  let rowValues = sheet
+    .getRange(row, 1, 1, sheet.getLastColumn())
+    .getValues()[0];
+  let rowNote = sheet.getRange(row, 1).getNote();
+  if (!isEmpty(rowNote)) {
+    SpreadsheetApp.getUi().alert(
+      "Die ausgewählte Zeile hat eine Notiz und ist deshalb ungültig"
+    );
+    return;
+  }
+  let kurs = kursNTD(
+    rowValues[kursNummerIndex - 1],
+    rowValues[kursTitelIndex - 1],
+    date2Str(rowValues[kursDatumIndex - 1])
+  );
+
+  let buchungenRows = buchungenSheet.getLastRow() - 1; // first row = headers
+  let buchungenCols = buchungenSheet.getLastColumn();
+  let buchungenVals: any[][];
+  let buchungenNotes: string[][];
+  // getRange with 0 rows throws an exception instead of returning an empty array
+  if (buchungenRows < 1) {
+    SpreadsheetApp.getUi().alert("Keine Buchungen gefunden");
+    return;
+  }
+  let rows: string[][] = [];
+  buchungenVals = buchungenSheet
+    .getRange(2, 1, buchungenRows, buchungenCols)
+    .getValues();
+  buchungenNotes = buchungenSheet.getRange(2, 1, buchungenRows, 1).getNotes();
+
+  let bHdrs = headers["Buchungen"];
+  // first row of temp sheet: the headers
+  {
+    let row: string[] = [];
+    for (let [_, v] of printCols) {
+      row.push(v);
+    }
+    rows.push(row);
+  }
+  for (let i = 0; i < buchungenRows; i++) {
+    if (!isEmpty(buchungenNotes[i][0])) continue;
+    Logger.log("buchung", buchungenVals[i][kurseIndex - 1], kurs);
+    if (buchungenVals[i][kurseIndex - 1] === kurs) {
+      let row: string[] = [];
+      for (let [k, _] of printCols) {
+        row.push(buchungenVals[i][bHdrs[k] - 1]);
+      }
+      rows.push(row);
+    }
+  }
+
+  let ss = SpreadsheetApp.getActiveSpreadsheet();
+  //sheet = ss.getSheetByName(kurs);
+  //if (sheet) ss.deleteSheet(sheet);
+  sheet = ss.insertSheet(kurs);
+  for (let row of rows) sheet.appendRow(row);
+  let range = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn());
+  sheet.setActiveSelection(range);
+  printSelectedRange();
+  Utilities.sleep(10000);
+  ss.deleteSheet(sheet);
+}
+
+function objectToQueryString(obj: any) {
+  return Object.keys(obj)
+    .map(function (key) {
+      return Utilities.formatString("&%s=%s", key, obj[key]);
+    })
+    .join("");
+}
+
+// see https://gist.github.com/Spencer-Easton/78f9867a691e549c9c70
+let PRINT_OPTIONS = {
+  size: 7, // paper size. 0=letter, 1=tabloid, 2=Legal, 3=statement, 4=executive, 5=folio, 6=A3, 7=A4, 8=A5, 9=B4, 10=B
+  fzr: false, // repeat row headers
+  portrait: true, // false=landscape
+  fitw: true, // fit window or actual size
+  gridlines: false, // show gridlines
+  printtitle: true,
+  sheetnames: true,
+  pagenum: "UNDEFINED", // CENTER = show page numbers / UNDEFINED = do not show
+  attachment: false,
+};
+
+let PDF_OPTS = objectToQueryString(PRINT_OPTIONS);
+
+function printSelectedRange() {
+  SpreadsheetApp.flush();
+  let ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getActiveSheet();
+  let range = sheet.getActiveRange();
+
+  let gid = sheet.getSheetId();
+  let printRange = objectToQueryString({
+    c1: range.getColumn() - 1,
+    r1: range.getRow() - 1,
+    c2: range.getColumn() + range.getWidth() - 1,
+    r2: range.getRow() + range.getHeight() - 1,
+  });
+  let url = ss.getUrl();
+  Logger.log("url1", url);
+  let x = url.indexOf("/edit?");
+  url = url.slice(0, x);
+  url = url + "/export?format=pdf" + PDF_OPTS + printRange + "&gid=" + gid;
+  Logger.log("url2", url);
+  let htmlTemplate = HtmlService.createTemplateFromFile("print.html");
+  htmlTemplate.url = url;
+
+  let ev = htmlTemplate.evaluate();
+
+  SpreadsheetApp.getUi().showModalDialog(
+    ev.setHeight(10).setWidth(100),
+    "Drucke Auswahl"
+  );
 }
