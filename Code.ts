@@ -39,6 +39,7 @@ let printCols = new Map([
   ["Name", "Nachname"],
   ["ADFC-Mitgliedsnummer", "Mitglied"],
   ["Studieren Sie?", "Student"],
+  ["Telefonnummer für Rückfragen", "Telefon"],
   ["Anmeldebestätigung", "Bestätigt"],
   ["Bezahlt", "Bezahlt"],
 ]);
@@ -372,7 +373,7 @@ function verifyEmail() {
     }
     for (let ex in evalues) {
       let erow = evalues[ex];
-      if (erow.length < 3) continue;
+      if (isEmpty(erow[0])) continue;
       let eaddr = (erow[2] as string).toLowerCase();
       if (eaddr != baddr) continue;
       if (erow[1] != "Ja" || isEmpty(eaddr)) continue;
@@ -404,13 +405,14 @@ function isVerified(emailTo: string, buchungsRowNumbers: number[]): boolean {
   let evalues = evSheet.getSheetValues(2, 1, numRows, 3);
   emailTo = emailTo.toLowerCase();
   for (let i = 0; i < evalues.length; i++) {
-    if (evalues[i].length < 3) continue;
+    let erow = evalues[i];
+    if (isEmpty(erow[0])) continue;
     // Mit dieser Email-Adresse
-    if ((evalues[i][2] as string).toLowerCase() == emailTo) {
+    if ((erow[2] as string).toLowerCase() == emailTo) {
       for (let j = 0; j < buchungsRowNumbers.length; j++) {
         buchungenSheet
           .getRange(buchungsRowNumbers[j], verifikationsIndex)
-          .setValue(evalues[i][0]);
+          .setValue(erow[0]);
       }
       Logger.log("verifyEmail returns true");
       return true;
@@ -534,10 +536,12 @@ function checkBuchung(e: Event) {
   for (let i = 0; i < kurse.length; i++) {
     let kursFound = false;
     for (let j = 0; j < kurseVals.length; j++) {
+      let kurseRow = kurseVals[j];
+      if (!kurseRow[0]) continue;
       let kurs = kursNTD(
-        kurseVals[j][kursNummerIndex - 1] as string,
-        kurseVals[j][kursTitelIndex - 1] as string,
-        date2Str(kurseVals[j][kursDatumIndex - 1] as Date)
+        kurseRow[kursNummerIndex - 1] as string,
+        kurseRow[kursTitelIndex - 1] as string,
+        date2Str(kurseRow[kursDatumIndex - 1] as Date)
       );
       if (kurs === kurse[i]) {
         kursFound = true;
@@ -863,6 +867,19 @@ function isValidIban(iban: string) {
   return m == 1;
 }
 
+// I need any2str because a date copied to temp sheet showed as date.toString().
+// A ' in front of the date came too late.
+function any2Str(val: any): string {
+  if (typeof val == "object" && "getUTCHours" in val) {
+    return Utilities.formatDate(
+      val,
+      SpreadsheetApp.getActive().getSpreadsheetTimeZone(),
+      "dd.MM.YYYY"
+    );
+  }
+  return val.toString();
+}
+
 function printKursMembers() {
   Logger.log("printKursMembers");
   if (!inited) init();
@@ -927,23 +944,25 @@ function printKursMembers() {
     }
     rows.push(row);
   }
-  for (let i = 0; i < buchungenRows; i++) {
-    if (!isEmpty(buchungenNotes[i][0])) continue;
-    Logger.log("buchung", buchungenVals[i][kurseIndex - 1], kurs);
-    if (buchungenVals[i][kurseIndex - 1] === kurs) {
+  for (let b = 0; b < buchungenRows; b++) {
+    if (!isEmpty(buchungenNotes[b][0])) continue;
+    let brow = buchungenVals[b];
+    if (brow[kurseIndex - 1] === kurs) {
       let row: string[] = [];
       for (let [k, _] of printCols) {
-        row.push(buchungenVals[i][bHdrs[k] - 1]);
+        //for the ' see https://stackoverflow.com/questions/13758913/format-a-google-sheets-cell-in-plaintext-via-apps-script
+        // otherwise, telefon number 089... is printed as 89
+        let val = any2Str(brow[bHdrs[k] - 1]);
+        row.push("'" + val);
       }
       rows.push(row);
     }
   }
 
   let ss = SpreadsheetApp.getActiveSpreadsheet();
-  //sheet = ss.getSheetByName(kurs);
-  //if (sheet) ss.deleteSheet(sheet);
   sheet = ss.insertSheet(kurs);
   for (let row of rows) sheet.appendRow(row);
+  sheet.autoResizeColumns(1, sheet.getLastColumn());
   let range = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn());
   sheet.setActiveSelection(range);
   printSelectedRange();
