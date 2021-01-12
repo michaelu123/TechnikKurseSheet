@@ -16,9 +16,10 @@ let buchungenSheet: GoogleAppsScript.Spreadsheet.Sheet;
 // Buchungen:
 let mailIndex: number; // E-Mail-Adresse
 let mitgliederNrIndex: number;
-let studentIndex: number;
+// let studentIndex: number;
 let herrFrauIndex: number; // Anrede
 let nameIndex: number; // Name
+let zahlungsArtIndex: number; // Zahlungsart
 let zustimmungsIndex: number; // Zustimmung zur SEPA-Lastschrift
 let bestätigungsIndex: number; // Bestätigung (der Teilnahmebedingungen)
 let verifikationsIndex: number; // Verifikation (der Email-Adresse)
@@ -38,7 +39,7 @@ let printCols = new Map([
   ["Vorname", "Vorname"],
   ["Name", "Nachname"],
   ["ADFC-Mitgliedsnummer", "Mitglied"],
-  ["Studieren Sie?", "Student"],
+  // ["Studieren Sie?", "Student"],
   ["Telefonnummer für Rückfragen", "Telefon"],
   ["Anmeldebestätigung", "Bestätigt"],
   ["Bezahlt", "Bezahlt"],
@@ -112,9 +113,10 @@ function init() {
       buchungenSheet = sheet;
       mailIndex = sheetHeaders["E-Mail-Adresse"];
       mitgliederNrIndex = sheetHeaders["ADFC-Mitgliedsnummer"];
-      studentIndex = sheetHeaders["Studieren Sie?"];
+      // studentIndex = sheetHeaders["Studieren Sie?"];
       herrFrauIndex = sheetHeaders["Anrede"];
       nameIndex = sheetHeaders["Name"];
+      zahlungsArtIndex = sheetHeaders["Zahlungsart"];
       bestätigungsIndex = sheetHeaders["Bestätigung"];
       kurseIndex = sheetHeaders[kursFrage];
       verifikationsIndex = sheetHeaders["Verifikation"];
@@ -185,11 +187,12 @@ function attachmentFiles() {
   return files; // why not use PDFs directly??
 }
 
-function kursPreis(mitglied: boolean, student: boolean) {
-  if (!mitglied && !student) return 15;
-  if (!mitglied && student) return 12.5;
-  if (mitglied && !student) return 10;
-  if (mitglied && student) return 7.5;
+function kursPreis(mitglied: boolean, _student: boolean) {
+  return mitglied ? 10 : 15;
+  // if (!mitglied && !student) return 15;
+  // if (!mitglied && student) return 12.5;
+  // if (mitglied && !student) return 10;
+  // if (mitglied && student) return 7.5;
   return 0;
 }
 
@@ -239,7 +242,7 @@ function anmeldebestätigung() {
   let herrFrau = rowValues[herrFrauIndex - 1];
   let name = rowValues[nameIndex - 1];
   let mitglied = !isEmpty(rowValues[mitgliederNrIndex - 1]);
-  let student = rowValues[studentIndex - 1] === "Ja";
+  let student = false; // rowValues[studentIndex - 1] === "Ja";
 
   let anrede: string = anredeText(herrFrau, name);
   let kurs: string = rowValues[kurseIndex - 1];
@@ -280,7 +283,7 @@ function anmeldebestätigungen(
         let herrFrau = rowValues[herrFrauIndex - 1];
         let name = rowValues[nameIndex - 1];
         let mitglied = !isEmpty(rowValues[mitgliederNrIndex - 1]);
-        let student = rowValues[studentIndex - 1] === "Ja";
+        let student = false; // rowValues[studentIndex - 1] === "Ja";
         anrede = anredeText(herrFrau, name);
         einzelBetrag = kursPreis(mitglied, student);
       }
@@ -327,17 +330,18 @@ function onOpen() {
 }
 
 function dispatch(e: Event) {
+  let docLock = LockService.getScriptLock();
+  let locked = docLock.tryLock(30000);
+  if (!locked) {
+    Logger.log("Could not obtain document lock");
+  }
   if (!inited) init();
-  // let keys = Object.keys(e);
-  // Logger.log("verif2", keys);
-  // for (let key of keys) {
-  //   Logger.log("key %s val %s keys %s", key, e[key], Object.keys(e[key]));
-  // }
   let range: GoogleAppsScript.Spreadsheet.Range = e.range;
   let sheet = range.getSheet();
-  Logger.log("dispatch sheet", sheet.getName(), range.getA1Notation());
+  Logger.log("dispatch sheet %s %s", sheet.getName(), range.getA1Notation());
   if (sheet.getName() == "Buchungen") checkBuchung(e);
   if (sheet.getName() == "Email-Verifikation") verifyEmail();
+  if (locked) docLock.releaseLock();
 }
 
 function verifyEmail() {
@@ -447,40 +451,44 @@ function anrede(e: Event) {
   } else {
     anrede = "Sehr geehrte Frau ";
   }
-  Logger.log("anrede", anrede, vorname, name);
+  Logger.log("anrede %s %s %s", anrede, vorname, name);
   return anrede + vorname + " " + name;
 }
 
 function checkBuchung(e: Event) {
-  Logger.log("checkBuchung");
+  Logger.log("checkBuchung %s", e.namedValues);
   let range: GoogleAppsScript.Spreadsheet.Range = e.range;
   let sheet = range.getSheet();
   let row = range.getRow();
   let cellA = range.getCell(1, 1);
   Logger.log("sheet %s row %s cellA %s", sheet, row, cellA.getA1Notation());
-
-  let ibanNV = e.namedValues["IBAN-Kontonummer"][0];
-  let iban = ibanNV.replace(/\s/g, "").toUpperCase();
   let emailTo = e.namedValues["E-Mail-Adresse"][0];
   let anredeE = anrede(e);
   let mitglied = !isEmpty(e.namedValues["ADFC-Mitgliedsnummer"][0]);
-  let student = e.namedValues["Studieren Sie?"][0] === "Ja";
+  let student = false; // e.namedValues["Studieren Sie?"][0] === "Ja";
+  let zahlungsArt = e.namedValues["Zahlungsart"][0];
   Logger.log(
-    "iban=%s emailTo=%s Anrede %s Mitglied %s Student %s",
-    iban,
+    "emailTo=%s Anrede %s Mitglied %s Student %s Zahlungsart %s",
     emailTo,
     anredeE,
     mitglied,
-    student
+    student,
+    zahlungsArt
   );
-  if (!isValidIban(iban)) {
-    sendWrongIbanEmail(emailTo, anredeE, iban);
-    cellA.setNote("Ungültige IBAN");
-    return;
-  }
-  if (iban != ibanNV) {
-    let cellIban = range.getCell(1, headers["Buchungen"]["IBAN-Kontonummer"]);
-    cellIban.setValue(iban);
+
+  if (zahlungsArt === "SEPA-Lastschriftverfahren") {
+    let ibanNV = e.namedValues["IBAN-Kontonummer"][0];
+    let iban = ibanNV.replace(/\s/g, "").toUpperCase();
+    Logger.log("iban=%s", iban);
+    if (!isValidIban(iban)) {
+      sendWrongIbanEmail(emailTo, anredeE, iban);
+      cellA.setNote("Ungültige IBAN");
+      return;
+    }
+    if (iban != ibanNV) {
+      let cellIban = range.getCell(1, headers["Buchungen"]["IBAN-Kontonummer"]);
+      cellIban.setValue(iban);
+    }
   }
   // Die Zellen Zustimmung und Bestätigung sind im Formular als Pflichtantwort eingetragen
   // und können garnicht anders als gesetzt sein. Sonst hier prüfen analog zu IBAN.
@@ -494,7 +502,7 @@ function checkBuchung(e: Event) {
       kurse.push(tlItem.trim());
     }
   }
-  // Logger.log("check2", einzeln, personen, restPlätzeIndex, kurse, kurse.length);
+  // Logger.log("check2 %s %s %s %s %s", einzeln, personen, restPlätzeIndex, kurse, kurse.length);
   if (kurse.length == 0) {
     Logger.log("check4");
     // cannot happen, answer is mandatory
@@ -573,7 +581,7 @@ function checkBuchung(e: Event) {
   if (restChanged) {
     updateForm();
   }
-  Logger.log("msgs: ", msgs, msgs.length);
+  Logger.log("msgs: %s %s", msgs, msgs.length);
   sendeAntwort(emailTo, verified, anredeE, betrag, msgs);
   if (verified) {
     let heute = heuteString();
@@ -590,7 +598,7 @@ function sendeAntwort(
   betrag: number,
   msgs: Array<string>
 ) {
-  Logger.log("sendeAntwort emailTo=", emailTo);
+  Logger.log("sendeAntwort emailTo=%s", emailTo);
 
   let templateFile = verified ? "emailBestätigung.html" : "emailVerif.html";
   let template: GoogleAppsScript.HTML.HtmlTemplate = HtmlService.createTemplateFromFile(
@@ -610,17 +618,24 @@ function sendeAntwort(
   let textbody = "HTML only";
   let options = {
     htmlBody: htmlText,
-    name: "Mehrtageskurse ADFC München e.V.",
+    name: "Technikkurse ADFC München e.V.",
     replyTo: "michael.uhlenberg@adfc-muenchen.de",
   };
   GmailApp.sendEmail(emailTo, subject, textbody, options);
 }
 
 function update() {
+  let docLock = LockService.getScriptLock();
+  let locked = docLock.tryLock(30000);
+  if (!locked) {
+    SpreadsheetApp.getUi().alert("Konnte Dokument nicht locken");
+    return;
+  }
   if (!inited) init();
   verifyEmail();
   updateKursReste();
   updateForm();
+  docLock.releaseLock();
 }
 
 function date2Str(ddate: Date): string {
@@ -723,7 +738,7 @@ function updateForm() {
     // check if all cells of Kurs row are nonempty
     for (let hdr in kurseHdrs) {
       if (isEmpty(kursObj[hdr])) {
-        Logger.log("In Kurse Zeile mit leerem Feld ", hdr);
+        Logger.log("In Kurse Zeile mit leerem Feld %s", hdr);
         ok = false;
       }
     }
@@ -1007,11 +1022,11 @@ function printSelectedRange() {
     r2: range.getRow() + range.getHeight() - 1,
   });
   let url = ss.getUrl();
-  Logger.log("url1", url);
+  Logger.log("url1 %s", url);
   let x = url.indexOf("/edit?");
   url = url.slice(0, x);
   url = url + "/export?format=pdf" + PDF_OPTS + printRange + "&gid=" + gid;
-  Logger.log("url2", url);
+  Logger.log("url2 %s", url);
   let htmlTemplate = HtmlService.createTemplateFromFile("print.html");
   htmlTemplate.url = url;
 
