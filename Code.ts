@@ -196,6 +196,14 @@ function kursPreis(mitglied: boolean, _student: boolean) {
   return 0;
 }
 
+function bezahlZeile(perLastschrift: boolean, betrag: number) {
+  return perLastschrift
+    ? "Der Betrag von " + betrag + "€ wird von Ihrem Konto abgebucht."
+    : "Bitte überweisen Sie den Betrag von " +
+        betrag +
+        "€ auf das Konto DE62 7015 0000 0904 1577 81 unter Angabe der Kursnummer(n).";
+}
+
 function anmeldebestätigung() {
   Logger.log("anmeldebestätigung");
   if (!inited) init();
@@ -239,20 +247,25 @@ function anmeldebestätigung() {
   // setting up mail
   let emailTo: string = rowValues[mailIndex - 1];
   let subject: string = "Bestätigung Ihrer Buchung";
-  let herrFrau = rowValues[herrFrauIndex - 1];
-  let name = rowValues[nameIndex - 1];
+  let herrFrau: string = rowValues[herrFrauIndex - 1];
+  let name: string = rowValues[nameIndex - 1];
   let mitglied = !isEmpty(rowValues[mitgliederNrIndex - 1]);
   let student = false; // rowValues[studentIndex - 1] === "Ja";
 
   let anrede: string = anredeText(herrFrau, name);
   let kurs: string = rowValues[kurseIndex - 1];
   let betrag: number = kursPreis(mitglied, student);
+
+  let perLastschrift = rowValues[zahlungsArtIndex - 1].startsWith("SEPA");
+  let bezahlen = bezahlZeile(perLastschrift, betrag);
+
   let template: GoogleAppsScript.HTML.HtmlTemplate = HtmlService.createTemplateFromFile(
     "emailBestätigung.html"
   );
   template.anrede = anrede;
   template.kurse = ["Sie sind für den Kurs '" + kurs + "' angemeldet."];
   template.betrag = betrag;
+  template.bezahlen = bezahlen;
 
   let htmlText: string = template.evaluate().getContent();
   let textbody = "HTML only";
@@ -277,6 +290,7 @@ function anmeldebestätigungen(
     let einzelBetrag = 0;
     let betrag = 0;
     let kurse: string[] = [];
+    let perLastschrift: boolean;
     for (let row of rows) {
       let rowValues = buchungenVals[row];
       if (einzelBetrag === 0) {
@@ -284,6 +298,7 @@ function anmeldebestätigungen(
         let name = rowValues[nameIndex - 1];
         let mitglied = !isEmpty(rowValues[mitgliederNrIndex - 1]);
         let student = false; // rowValues[studentIndex - 1] === "Ja";
+        perLastschrift = rowValues[zahlungsArtIndex - 1].startsWith("SEPA");
         anrede = anredeText(herrFrau, name);
         einzelBetrag = kursPreis(mitglied, student);
       }
@@ -293,6 +308,8 @@ function anmeldebestätigungen(
     }
     if (betrag === 0) continue;
 
+    let bezahlen = bezahlZeile(perLastschrift, betrag);
+
     // setting up mail
     let template: GoogleAppsScript.HTML.HtmlTemplate = HtmlService.createTemplateFromFile(
       "emailBestätigung.html"
@@ -300,6 +317,7 @@ function anmeldebestätigungen(
     template.anrede = anrede;
     template.kurse = kurse;
     template.betrag = betrag;
+    template.bezahlen = bezahlen;
 
     let htmlText: string = template.evaluate().getContent();
     let textbody = "HTML only";
@@ -466,7 +484,8 @@ function checkBuchung(e: Event) {
   let anredeE = anrede(e);
   let mitglied = !isEmpty(e.namedValues["ADFC-Mitgliedsnummer"][0]);
   let student = false; // e.namedValues["Studieren Sie?"][0] === "Ja";
-  let zahlungsArt = e.namedValues["Zahlungsart"][0];
+  let zahlungsArt: string = e.namedValues["Zahlungsart"][0];
+  let perLastschrift = zahlungsArt.startsWith("SEPA");
   Logger.log(
     "emailTo=%s Anrede %s Mitglied %s Student %s Zahlungsart %s",
     emailTo,
@@ -476,7 +495,7 @@ function checkBuchung(e: Event) {
     zahlungsArt
   );
 
-  if (zahlungsArt === "SEPA-Lastschriftverfahren") {
+  if (perLastschrift) {
     let ibanNV = e.namedValues["IBAN-Kontonummer"][0];
     let iban = ibanNV.replace(/\s/g, "").toUpperCase();
     Logger.log("iban=%s", iban);
@@ -581,8 +600,11 @@ function checkBuchung(e: Event) {
   if (restChanged) {
     updateForm();
   }
+
+  let bezahlen = bezahlZeile(perLastschrift, betrag);
   Logger.log("msgs: %s %s", msgs, msgs.length);
-  sendeAntwort(emailTo, verified, anredeE, betrag, msgs);
+  Logger.log("bezahlen: %s", bezahlen);
+  sendeAntwort(emailTo, verified, anredeE, betrag, bezahlen, msgs);
   if (verified) {
     let heute = heuteString();
     for (let row of buchungsRowNumbers) {
@@ -596,6 +618,7 @@ function sendeAntwort(
   verified: boolean,
   anredeE: string,
   betrag: number,
+  bezahlen: string,
   msgs: Array<string>
 ) {
   Logger.log("sendeAntwort emailTo=%s", emailTo);
@@ -607,6 +630,7 @@ function sendeAntwort(
   template.anrede = anredeE;
   template.kurse = msgs;
   template.betrag = betrag;
+  template.bezahlen = bezahlen;
   template.verifLink =
     "https://docs.google.com/forms/d/e/1FAIpQLSeEcceEKaHoGzwdw2qJlu0fpAKkhECG5CnQhi1jVXOcwt-6sw/viewform?usp=pp_url&entry.1398709542=Ja&entry.576071197=" +
     encodeURIComponent(emailTo);
