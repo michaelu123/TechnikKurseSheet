@@ -54,6 +54,7 @@ interface Event {
 }
 
 function isEmpty(str: string | undefined | null) {
+  if (typeof str == "number") return false;
   return !str || 0 === str.length; // I think !str is sufficient...
 }
 
@@ -766,9 +767,9 @@ function updateForm() {
         ok = false;
       }
     }
-    if (ok) {
-      ok = +kursObj["Restplätze"] > 0;
-    }
+    // if (ok) {
+    //   ok = +kursObj["Restplätze"] > 0;
+    // }
     if (ok) kurseObjs.push(kursObj);
   }
   Logger.log("kurseObjs=%s", kurseObjs);
@@ -802,11 +803,16 @@ function updateForm() {
       kursObj["Kursdatum"]
     );
     mr = mr.replace(",", ""); // mehrere Buchungen werden durch Komma getrennt, s.o.
-    let desc = mr + ", freie Plätze: " + kursObj["Restplätze"];
+
+    let ok = +kursObj["Restplätze"] > 0;
+    let desc =
+      mr + (ok ? ", freie Plätze: " + kursObj["Restplätze"] : ", ausgebucht!");
     // Logger.log("desc %s", desc);
     descs.push(desc);
-    let choice = kurseItem.createChoice(mr);
-    choices.push(choice);
+    if (ok) {
+      let choice = kurseItem.createChoice(mr);
+      choices.push(choice);
+    }
   }
   let beschreibung =
     "Sie können einen oder mehrere Kurse ankreuzen. Bitte beachten Sie die Anzahl noch freier Plätze!\n\n" +
