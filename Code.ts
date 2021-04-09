@@ -19,12 +19,12 @@ let mitgliederNrIndex: number;
 // let studentIndex: number;
 let herrFrauIndex: number; // Anrede
 let nameIndex: number; // Name
-let zahlungsArtIndex: number; // Zahlungsart
+// let zahlungsArtIndex: number; // Zahlungsart
 let zustimmungsIndex: number; // Zustimmung zur SEPA-Lastschrift
 let bestätigungsIndex: number; // Bestätigung (der Teilnahmebedingungen)
 let verifikationsIndex: number; // Verifikation (der Email-Adresse)
 let anmeldebestIndex: number; // Anmeldebestätigung (gesendet)
-let kurseIndex: number; // Welche Kurse möchten Sie belegen?
+let kurseIndex: number; // Welche Kurse möchtest Du belegen?
 let bezahltIndex: number; // Bezahlt
 
 // Kurse:
@@ -45,7 +45,7 @@ let printCols = new Map([
   ["Bezahlt", "Bezahlt"],
 ]);
 
-const kursFrage = "Welche Kurse möchten Sie belegen?";
+const kursFrage = "Welche Kurse möchtest Du belegen?";
 
 interface Event {
   namedValues: { [others: string]: string[] };
@@ -68,7 +68,7 @@ function test() {
       "E-Mail-Adresse": ["michael.uhlenberg@t-online.de"],
       "IBAN-Kontonummer": ["DE91100000000123456789"],
       "ADFC-Mitgliedsnummer": ["1234"],
-      "Studieren Sie?": ["Nein"],
+      // "Studieren Sie?": ["Nein"],
       [kursFrage]: [
         "K712: Ich mach' das schon - Pannenhilfe für Mütter und Töchter am 01.08.2020",
         "K713: Grundkurs für Räder mit Kettenschaltung am 11.08.2020",
@@ -117,7 +117,7 @@ function init() {
       // studentIndex = sheetHeaders["Studieren Sie?"];
       herrFrauIndex = sheetHeaders["Anrede"];
       nameIndex = sheetHeaders["Name"];
-      zahlungsArtIndex = sheetHeaders["Zahlungsart"];
+      // zahlungsArtIndex = sheetHeaders["Zahlungsart"];
       bestätigungsIndex = sheetHeaders["Bestätigung"];
       kurseIndex = sheetHeaders[kursFrage];
       verifikationsIndex = sheetHeaders["Verifikation"];
@@ -141,7 +141,7 @@ function init() {
 function addColumn(
   sheet: GoogleAppsScript.Spreadsheet.Sheet,
   sheetHeaders: MapS2I,
-  title: string
+  title: string,
 ): number {
   let max = 0;
   for (let sh in sheetHeaders) {
@@ -168,7 +168,7 @@ function heuteString() {
   return Utilities.formatDate(
     new Date(),
     SpreadsheetApp.getActive().getSpreadsheetTimeZone(),
-    "YYYY-MM-dd HH:mm:ss"
+    "YYYY-MM-dd HH:mm:ss",
   );
 }
 
@@ -176,8 +176,8 @@ function attachmentFiles() {
   let thisFileId = SpreadsheetApp.getActive().getId();
   let thisFile = DriveApp.getFileById(thisFileId);
   let parent = thisFile.getParents().next();
-  let grandPa = parent.getParents().next();
-  let attachmentFolder = grandPa
+  // let grandPa = parent.getParents().next();
+  let attachmentFolder = parent // grandPa
     .getFoldersByName("Anhänge für Anmelde-Bestätigung")
     .next();
   let PDFs = attachmentFolder.getFilesByType("application/pdf"); // MimeType.PDF
@@ -199,8 +199,8 @@ function kursPreis(mitglied: boolean, _student: boolean) {
 
 function bezahlZeile(perLastschrift: boolean, betrag: number) {
   return perLastschrift
-    ? "Der Betrag von " + betrag + "€ wird von Ihrem Konto abgebucht."
-    : "Bitte überweisen Sie den Betrag von " +
+    ? "Der Betrag von " + betrag + "€ wird von Deinem Konto abgebucht."
+    : "Bitte überweise den Betrag von " +
         betrag +
         "€ auf das Konto DE62 7015 0000 0904 1577 81 unter Angabe der Kursnummer(n).";
 }
@@ -211,7 +211,7 @@ function anmeldebestätigung() {
   let sheet = SpreadsheetApp.getActiveSheet();
   if (sheet.getName() != "Buchungen") {
     SpreadsheetApp.getUi().alert(
-      "Bitte eine Zeile im Sheet 'Buchungen' selektieren"
+      "Bitte eine Zeile im Sheet 'Buchungen' selektieren",
     );
     return;
   }
@@ -223,7 +223,7 @@ function anmeldebestätigung() {
   let row = curCell.getRow();
   if (row < 2 || row > sheet.getLastRow()) {
     SpreadsheetApp.getUi().alert(
-      "Die ausgewählte Zeile ist ungültig, bitte zuerst Teilnehmerzeile selektieren"
+      "Die ausgewählte Zeile ist ungültig, bitte zuerst Teilnehmerzeile selektieren",
     );
     return;
   }
@@ -233,7 +233,7 @@ function anmeldebestätigung() {
   let rowNote = sheet.getRange(row, 1).getNote();
   if (!isEmpty(rowNote)) {
     SpreadsheetApp.getUi().alert(
-      "Die ausgewählte Zeile hat eine Notiz und ist deshalb ungültig"
+      "Die ausgewählte Zeile hat eine Notiz und ist deshalb ungültig",
     );
     return;
   }
@@ -257,14 +257,14 @@ function anmeldebestätigung() {
   let kurs: string = rowValues[kurseIndex - 1];
   let betrag: number = kursPreis(mitglied, student);
 
-  let perLastschrift = rowValues[zahlungsArtIndex - 1].startsWith("SEPA");
+  let perLastschrift = true; // rowValues[zahlungsArtIndex - 1].startsWith("SEPA");
   let bezahlen = bezahlZeile(perLastschrift, betrag);
 
   let template: GoogleAppsScript.HTML.HtmlTemplate = HtmlService.createTemplateFromFile(
-    "emailBestätigung.html"
+    "emailBestätigung.html",
   );
   template.anrede = anrede;
-  template.kurse = ["Sie sind für den Kurs '" + kurs + "' angemeldet."];
+  template.kurse = ["Du bist für den Kurs '" + kurs + "' angemeldet."];
   template.betrag = betrag;
   template.bezahlen = bezahlen;
 
@@ -274,6 +274,7 @@ function anmeldebestätigung() {
     htmlBody: htmlText,
     name: "Technikkurse ADFC München e.V.",
     replyTo: "michael.uhlenberg@adfc-muenchen.de",
+    attachments: attachmentFiles(),
   };
   GmailApp.sendEmail(emailTo, subject, textbody, options);
   // update sheet
@@ -282,7 +283,7 @@ function anmeldebestätigung() {
 
 function anmeldebestätigungen(
   buchungenMap: Map<string, number[]>,
-  buchungenVals: any[][]
+  buchungenVals: any[][],
 ) {
   Logger.log("anmeldebestätigungen");
   let subject: string = "Bestätigung Ihrer Buchung";
@@ -299,12 +300,12 @@ function anmeldebestätigungen(
         let name = rowValues[nameIndex - 1];
         let mitglied = !isEmpty(rowValues[mitgliederNrIndex - 1]);
         let student = false; // rowValues[studentIndex - 1] === "Ja";
-        perLastschrift = rowValues[zahlungsArtIndex - 1].startsWith("SEPA");
+        perLastschrift = true; // rowValues[zahlungsArtIndex - 1].startsWith("SEPA");
         anrede = anredeText(herrFrau, name);
         einzelBetrag = kursPreis(mitglied, student);
       }
       let kurs: string = rowValues[kurseIndex - 1];
-      kurse.push("Sie sind für den Kurs '" + kurs + "' angemeldet.");
+      kurse.push("Du bist für den Kurs '" + kurs + "' angemeldet.");
       betrag += einzelBetrag;
     }
     if (betrag === 0) continue;
@@ -313,7 +314,7 @@ function anmeldebestätigungen(
 
     // setting up mail
     let template: GoogleAppsScript.HTML.HtmlTemplate = HtmlService.createTemplateFromFile(
-      "emailBestätigung.html"
+      "emailBestätigung.html",
     );
     template.anrede = anrede;
     template.kurse = kurse;
@@ -326,6 +327,7 @@ function anmeldebestätigungen(
       htmlBody: htmlText,
       name: "Technikkurse ADFC München e.V.",
       replyTo: "michael.uhlenberg@adfc-muenchen.de",
+      attachments: attachmentFiles(),
     };
     GmailApp.sendEmail(emailTo, subject, textbody, options);
     // update sheet
@@ -374,7 +376,7 @@ function verifyEmail() {
     2,
     1,
     numRows,
-    evSheet.getLastColumn() // = 3
+    evSheet.getLastColumn(), // = 3
   );
 
   numRows = buchungenSheet.getLastRow() - 1;
@@ -485,15 +487,15 @@ function checkBuchung(e: Event) {
   let anredeE = anrede(e);
   let mitglied = !isEmpty(e.namedValues["ADFC-Mitgliedsnummer"][0]);
   let student = false; // e.namedValues["Studieren Sie?"][0] === "Ja";
-  let zahlungsArt: string = e.namedValues["Zahlungsart"][0];
-  let perLastschrift = zahlungsArt.startsWith("SEPA");
+  // let zahlungsArt: string = e.namedValues["Zahlungsart"][0];
+  let perLastschrift = true; // zahlungsArt.startsWith("SEPA");
   Logger.log(
     "emailTo=%s Anrede %s Mitglied %s Student %s Zahlungsart %s",
     emailTo,
     anredeE,
     mitglied,
     student,
-    zahlungsArt
+    // zahlungsArt
   );
 
   if (perLastschrift) {
@@ -556,7 +558,7 @@ function checkBuchung(e: Event) {
     2,
     1,
     kurseSheet.getLastRow(),
-    kurseSheet.getLastColumn()
+    kurseSheet.getLastColumn(),
   );
   let restChanged = false;
   let betrag = 0;
@@ -569,7 +571,7 @@ function checkBuchung(e: Event) {
       let kurs = kursNTD(
         kurseRow[kursNummerIndex - 1] as string,
         kurseRow[kursTitelIndex - 1] as string,
-        date2Str(kurseRow[kursDatumIndex - 1] as Date)
+        date2Str(kurseRow[kursDatumIndex - 1] as Date),
       );
       if (kurs === kurse[i]) {
         kursFound = true;
@@ -579,9 +581,9 @@ function checkBuchung(e: Event) {
           sheet.getRange(buchungsRowNumbers[i], 1).setNote("Ausgebucht");
         } else {
           msgs.push(
-            "Sie sind für den Kurs '" +
+            "Du bist für den Kurs '" +
               kurs +
-              (verified ? "' angemeldet." : "' vorgemerkt.")
+              (verified ? "' angemeldet." : "' vorgemerkt."),
           );
           kurseSheet.getRange(2 + j, restPlätzeIndex).setValue(rest - 1);
           restChanged = true;
@@ -591,7 +593,7 @@ function checkBuchung(e: Event) {
       }
     }
     if (!kursFound) {
-      Logger.log("Kurs '" + kurse[i] + " nicht im Kurse-Sheet!?");
+      Logger.log("Kurs '" + kurse[i] + "' nicht im Kurse-Sheet!?");
     }
   }
   if (msgs.length == 0) {
@@ -620,20 +622,20 @@ function sendeAntwort(
   anredeE: string,
   betrag: number,
   bezahlen: string,
-  msgs: Array<string>
+  msgs: Array<string>,
 ) {
   Logger.log("sendeAntwort emailTo=%s", emailTo);
 
   let templateFile = verified ? "emailBestätigung.html" : "emailVerif.html";
   let template: GoogleAppsScript.HTML.HtmlTemplate = HtmlService.createTemplateFromFile(
-    templateFile
+    templateFile,
   );
   template.anrede = anredeE;
   template.kurse = msgs;
   template.betrag = betrag;
   template.bezahlen = bezahlen;
   template.verifLink =
-    "https://docs.google.com/forms/d/e/1FAIpQLSeEcceEKaHoGzwdw2qJlu0fpAKkhECG5CnQhi1jVXOcwt-6sw/viewform?usp=pp_url&entry.1398709542=Ja&entry.576071197=" +
+    "https://docs.google.com/forms/d/e/1FAIpQLSfH96t0eFJuq68XX8hjOz7qvGPtQgAqkOL7p2x333bAvf8Mqg/viewform?usp=pp_url&entry.1398709542=Ja&entry.576071197=" +
     encodeURIComponent(emailTo);
 
   let htmlText: string = template.evaluate().getContent();
@@ -645,6 +647,7 @@ function sendeAntwort(
     htmlBody: htmlText,
     name: "Technikkurse ADFC München e.V.",
     replyTo: "michael.uhlenberg@adfc-muenchen.de",
+    attachments: verified ? attachmentFiles() : [],
   };
   GmailApp.sendEmail(emailTo, subject, textbody, options);
 }
@@ -667,7 +670,7 @@ function date2Str(ddate: Date): string {
   let sdate: string = Utilities.formatDate(
     ddate,
     SpreadsheetApp.getActive().getSpreadsheetTimeZone(),
-    "dd.MM.YYYY"
+    "dd.MM.YYYY",
   );
   return sdate;
 }
@@ -734,7 +737,7 @@ function updateKursReste() {
           restPlätze +
           " auf " +
           kursRest +
-          " geändert!"
+          " geändert!",
       );
     }
   }
@@ -790,7 +793,7 @@ function updateForm() {
   }
   if (kurseItem == null) {
     SpreadsheetApp.getUi().alert(
-      'Das Formular hat keine Frage "' + kursFrage + '"!'
+      'Das Formular hat keine Frage "' + kursFrage + '"!',
     );
     return;
   }
@@ -800,7 +803,7 @@ function updateForm() {
     let mr: string = kursNTD(
       kursObj["Kursnummer"],
       kursObj["Kurstitel"],
-      kursObj["Kursdatum"]
+      kursObj["Kursdatum"],
     );
     mr = mr.replace(",", ""); // mehrere Buchungen werden durch Komma getrennt, s.o.
 
@@ -814,9 +817,18 @@ function updateForm() {
       choices.push(choice);
     }
   }
-  let beschreibung =
-    "Sie können einen oder mehrere Kurse ankreuzen. Bitte beachten Sie die Anzahl noch freier Plätze!\n\n" +
-    descs.join("\n");
+  let beschreibung: string;
+  if (choices.length === 0) {
+    beschreibung = "Leider sind alle Kurse ausgebucht!\n" + descs.join("\n");
+    form.setAcceptingResponses(false);
+    form.setCustomClosedFormMessage("Leider sind alle Kurse ausgebucht!\n");
+  } else {
+    beschreibung =
+      "Du kannst einen oder mehrere Kurse ankreuzen. Bitte beachte die Anzahl noch freier Plätze!\n\n" +
+      descs.join("\n");
+    form.setAcceptingResponses(true);
+  }
+
   kurseItem.setHelpText(beschreibung);
   kurseItem.setChoices(choices);
 }
@@ -828,7 +840,7 @@ function sendWrongIbanEmail(empfaenger: string, anrede: string, iban: string) {
     anrede +
     ",\nDie von Ihnen bei der Buchung von ADFC Technikkurse übermittelte IBAN " +
     iban +
-    " ist leider falsch! Bitte wiederholen Sie die Buchung mit einer korrekten IBAN.";
+    " ist leider falsch! Bitte wiederhole die Buchung mit einer korrekten IBAN.";
   GmailApp.sendEmail(empfaenger, subject, body);
 }
 
@@ -919,7 +931,7 @@ function any2Str(val: any): string {
     return Utilities.formatDate(
       val,
       SpreadsheetApp.getActive().getSpreadsheetTimeZone(),
-      "dd.MM.YYYY"
+      "dd.MM.YYYY",
     );
   }
   return val.toString();
@@ -931,21 +943,21 @@ function printKursMembers() {
   let sheet = SpreadsheetApp.getActiveSheet();
   if (sheet.getName() != "Kurse") {
     SpreadsheetApp.getUi().alert(
-      "Bitte eine Zeile im Sheet 'Kurse' selektieren"
+      "Bitte eine Zeile im Sheet 'Kurse' selektieren",
     );
     return;
   }
   let curCell = sheet.getSelection().getCurrentCell();
   if (!curCell) {
     SpreadsheetApp.getUi().alert(
-      "Bitte zuerst eine Zeile im Sheet 'Kurse' selektieren"
+      "Bitte zuerst eine Zeile im Sheet 'Kurse' selektieren",
     );
     return;
   }
   let row = curCell.getRow();
   if (row < 2 || row > sheet.getLastRow()) {
     SpreadsheetApp.getUi().alert(
-      "Die ausgewählte Zeile ist ungültig, bitte zuerst Kurszeile selektieren"
+      "Die ausgewählte Zeile ist ungültig, bitte zuerst Kurszeile selektieren",
     );
     return;
   }
@@ -955,14 +967,14 @@ function printKursMembers() {
   let rowNote = sheet.getRange(row, 1).getNote();
   if (!isEmpty(rowNote)) {
     SpreadsheetApp.getUi().alert(
-      "Die ausgewählte Zeile hat eine Notiz und ist deshalb ungültig"
+      "Die ausgewählte Zeile hat eine Notiz und ist deshalb ungültig",
     );
     return;
   }
   let kurs = kursNTD(
     rowValues[kursNummerIndex - 1],
     rowValues[kursTitelIndex - 1],
-    date2Str(rowValues[kursDatumIndex - 1])
+    date2Str(rowValues[kursDatumIndex - 1]),
   );
 
   let buchungenRows = buchungenSheet.getLastRow() - 1; // first row = headers
@@ -1064,6 +1076,6 @@ function printSelectedRange() {
 
   SpreadsheetApp.getUi().showModalDialog(
     ev.setHeight(10).setWidth(100),
-    "Drucke Auswahl"
+    "Drucke Auswahl",
   );
 }
