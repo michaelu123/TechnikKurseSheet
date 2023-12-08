@@ -18,6 +18,7 @@ let mailIndex: number; // E-Mail-Adresse
 let mitgliederNrIndex: number;
 // let studentIndex: number;
 let herrFrauIndex: number; // Anrede
+let vornameIndex: number; // Vorname
 let nameIndex: number; // Name
 // let zahlungsArtIndex: number; // Zahlungsart
 let zustimmungsIndex: number; // Zustimmung zur SEPA-Lastschrift
@@ -41,13 +42,13 @@ let printCols = new Map([
   ["ADFC-Mitgliedsnummer", "Mitglied"],
   // ["Studieren Sie?", "Student"],
   ["Telefonnummer für Rückfragen", "Telefon"],
-  ["Anmeldebestätigung", "Bestätigt"],
+  ["E-Mail-Adresse", "Email"],
   ["Bezahlt", "Bezahlt"],
 ]);
 
 const kursFrage = "Welche Kurse möchtest Du belegen?";
 
-interface Event {
+interface SSEvent {
   namedValues: { [others: string]: string[] };
   range: GoogleAppsScript.Spreadsheet.Range;
   [others: string]: any;
@@ -60,7 +61,7 @@ function isEmpty(str: string | undefined | null) {
 
 function test() {
   init();
-  let e: Event = {
+  let e: SSEvent = {
     namedValues: {
       Vorname: ["Michael"],
       Name: ["Uhlenberg"],
@@ -116,6 +117,7 @@ function init() {
       mitgliederNrIndex = sheetHeaders["ADFC-Mitgliedsnummer"];
       // studentIndex = sheetHeaders["Studieren Sie?"];
       herrFrauIndex = sheetHeaders["Anrede"];
+      vornameIndex = sheetHeaders["Vorname"];
       nameIndex = sheetHeaders["Name"];
       // zahlungsArtIndex = sheetHeaders["Zahlungsart"];
       bestätigungsIndex = sheetHeaders["Bestätigung"];
@@ -156,11 +158,11 @@ function addColumn(
   return max;
 }
 
-function anredeText(herrFrau: string, name: string) {
+function anredeText(herrFrau: string, vorname: string, name: string) {
   if (herrFrau === "Herr") {
-    return "Sehr geehrter Herr " + name;
+    return "Sehr geehrter " + vorname + " " + name;
   } else {
-    return "Sehr geehrte Frau " + name;
+    return "Sehr geehrte " + vorname + " " + name;
   }
 }
 
@@ -189,7 +191,7 @@ function attachmentFiles() {
 }
 
 function kursPreis(mitglied: boolean, _student: boolean) {
-  return mitglied ? 10 : 15;
+  return mitglied ? 10 : 20;
   // if (!mitglied && !student) return 15;
   // if (!mitglied && student) return 12.5;
   // if (mitglied && !student) return 10;
@@ -247,22 +249,22 @@ function anmeldebestätigung() {
   }
   // setting up mail
   let emailTo: string = rowValues[mailIndex - 1];
-  let subject: string = "Bestätigung Ihrer Buchung";
+  let subject: string = "Bestätigung Deiner Buchung";
   let herrFrau: string = rowValues[herrFrauIndex - 1];
+  let vorname: string = rowValues[vornameIndex - 1];
   let name: string = rowValues[nameIndex - 1];
   let mitglied = !isEmpty(rowValues[mitgliederNrIndex - 1]);
   let student = false; // rowValues[studentIndex - 1] === "Ja";
 
-  let anrede: string = anredeText(herrFrau, name);
+  let anrede: string = anredeText(herrFrau, vorname, name);
   let kurs: string = rowValues[kurseIndex - 1];
   let betrag: number = kursPreis(mitglied, student);
 
   let perLastschrift = true; // rowValues[zahlungsArtIndex - 1].startsWith("SEPA");
   let bezahlen = bezahlZeile(perLastschrift, betrag);
 
-  let template: GoogleAppsScript.HTML.HtmlTemplate = HtmlService.createTemplateFromFile(
-    "emailBestätigung.html",
-  );
+  let template: GoogleAppsScript.HTML.HtmlTemplate =
+    HtmlService.createTemplateFromFile("emailBestätigung.html");
   template.anrede = anrede;
   template.kurse = ["Du bist für den Kurs '" + kurs + "' angemeldet."];
   template.betrag = betrag;
@@ -273,8 +275,8 @@ function anmeldebestätigung() {
   let options = {
     htmlBody: htmlText,
     name: "Technikkurse ADFC München e.V.",
-    replyTo: "michael.uhlenberg@adfc-muenchen.de",
-    attachments: attachmentFiles(),
+    replyTo: "anmeldungen-technikkurse@adfc-muenchen.de",
+    // attachments: attachmentFiles(),
   };
   GmailApp.sendEmail(emailTo, subject, textbody, options);
   // update sheet
@@ -286,7 +288,7 @@ function anmeldebestätigungen(
   buchungenVals: any[][],
 ) {
   Logger.log("anmeldebestätigungen");
-  let subject: string = "Bestätigung Ihrer Buchung";
+  let subject: string = "Bestätigung Deiner Buchung";
   for (let [emailTo, rows] of buchungenMap) {
     let anrede: string;
     let einzelBetrag = 0;
@@ -297,11 +299,12 @@ function anmeldebestätigungen(
       let rowValues = buchungenVals[row];
       if (einzelBetrag === 0) {
         let herrFrau = rowValues[herrFrauIndex - 1];
+        let vorname = rowValues[vornameIndex - 1];
         let name = rowValues[nameIndex - 1];
         let mitglied = !isEmpty(rowValues[mitgliederNrIndex - 1]);
         let student = false; // rowValues[studentIndex - 1] === "Ja";
         perLastschrift = true; // rowValues[zahlungsArtIndex - 1].startsWith("SEPA");
-        anrede = anredeText(herrFrau, name);
+        anrede = anredeText(herrFrau, vorname, name);
         einzelBetrag = kursPreis(mitglied, student);
       }
       let kurs: string = rowValues[kurseIndex - 1];
@@ -313,9 +316,8 @@ function anmeldebestätigungen(
     let bezahlen = bezahlZeile(perLastschrift, betrag);
 
     // setting up mail
-    let template: GoogleAppsScript.HTML.HtmlTemplate = HtmlService.createTemplateFromFile(
-      "emailBestätigung.html",
-    );
+    let template: GoogleAppsScript.HTML.HtmlTemplate =
+      HtmlService.createTemplateFromFile("emailBestätigung.html");
     template.anrede = anrede;
     template.kurse = kurse;
     template.betrag = betrag;
@@ -326,8 +328,8 @@ function anmeldebestätigungen(
     let options = {
       htmlBody: htmlText,
       name: "Technikkurse ADFC München e.V.",
-      replyTo: "michael.uhlenberg@adfc-muenchen.de",
-      attachments: attachmentFiles(),
+      replyTo: "anmeldungen-technikkurse@adfc-muenchen.de",
+      // attachments: attachmentFiles(),
     };
     GmailApp.sendEmail(emailTo, subject, textbody, options);
     // update sheet
@@ -350,7 +352,7 @@ function onOpen() {
     .addToUi();
 }
 
-function dispatch(e: Event) {
+function dispatch(e: SSEvent) {
   let docLock = LockService.getScriptLock();
   let locked = docLock.tryLock(30000);
   if (!locked) {
@@ -447,36 +449,22 @@ function isVerified(emailTo: string, buchungsRowNumbers: number[]): boolean {
   return false;
 }
 
-function anrede(e: Event) {
+function anrede(e: SSEvent) {
   // if Name is not set, nv["Name"] has value [""], i.e. not null, not [], not [null]!
-  let anredeA: Array<string> = e.namedValues["Anrede"];
-  if (anredeA == null || anredeA.length == 0 || isEmpty(anredeA[0])) {
-    anredeA = e.namedValues["Anrede 1"];
-  }
-  let anrede: string = anredeA[0];
-
-  let vornameA: Array<string> = e.namedValues["Vorname"];
-  if (vornameA == null || vornameA.length == 0 || isEmpty(vornameA[0])) {
-    vornameA = e.namedValues["Vorname 1"];
-  }
-  let vorname: string = vornameA[0];
-
-  let nameA: Array<string> = e.namedValues["Name"];
-  if (nameA == null || nameA.length == 0 || isEmpty(nameA[0])) {
-    nameA = e.namedValues["Name 1"];
-  }
-  let name: string = nameA[0];
+  let anrede: string = e.namedValues["Anrede"][0];
+  let vorname: string = e.namedValues["Vorname"][0];
+  let name: string = e.namedValues["Name"][0];
 
   if (anrede == "Herr") {
-    anrede = "Sehr geehrter Herr ";
+    anrede = "Sehr geehrter ";
   } else {
-    anrede = "Sehr geehrte Frau ";
+    anrede = "Sehr geehrte ";
   }
   Logger.log("anrede %s %s %s", anrede, vorname, name);
   return anrede + vorname + " " + name;
 }
 
-function checkBuchung(e: Event) {
+function checkBuchung(e: SSEvent) {
   Logger.log("checkBuchung %s", e.namedValues);
   let range: GoogleAppsScript.Spreadsheet.Range = e.range;
   let sheet = range.getSheet();
@@ -627,9 +615,8 @@ function sendeAntwort(
   Logger.log("sendeAntwort emailTo=%s", emailTo);
 
   let templateFile = verified ? "emailBestätigung.html" : "emailVerif.html";
-  let template: GoogleAppsScript.HTML.HtmlTemplate = HtmlService.createTemplateFromFile(
-    templateFile,
-  );
+  let template: GoogleAppsScript.HTML.HtmlTemplate =
+    HtmlService.createTemplateFromFile(templateFile);
   template.anrede = anredeE;
   template.kurse = msgs;
   template.betrag = betrag;
@@ -640,14 +627,14 @@ function sendeAntwort(
 
   let htmlText: string = template.evaluate().getContent();
   let subject = verified
-    ? "Bestätigung Ihrer Anmeldung"
-    : "Bestätigung Ihrer Email-Adresse";
+    ? "Bestätigung Deiner Anmeldung"
+    : "Bestätigung Deiner Email-Adresse";
   let textbody = "HTML only";
   let options = {
     htmlBody: htmlText,
     name: "Technikkurse ADFC München e.V.",
-    replyTo: "michael.uhlenberg@adfc-muenchen.de",
-    attachments: verified ? attachmentFiles() : [],
+    replyTo: "anmeldungen-technikkurse@adfc-muenchen.de",
+    // attachments: verified ? attachmentFiles() : [],
   };
   GmailApp.sendEmail(emailTo, subject, textbody, options);
 }
@@ -827,10 +814,9 @@ function updateForm() {
       "Du kannst einen oder mehrere Kurse ankreuzen. Bitte beachte die Anzahl noch freier Plätze!\n\n" +
       descs.join("\n");
     form.setAcceptingResponses(true);
+    kurseItem.setChoices(choices);
   }
-
   kurseItem.setHelpText(beschreibung);
-  kurseItem.setChoices(choices);
 }
 
 function sendWrongIbanEmail(empfaenger: string, anrede: string, iban: string) {
@@ -838,7 +824,7 @@ function sendWrongIbanEmail(empfaenger: string, anrede: string, iban: string) {
   let subject = "Falsche IBAN";
   let body =
     anrede +
-    ",\nDie von Ihnen bei der Buchung von ADFC Technikkurse übermittelte IBAN " +
+    ",\nDie von Dir bei der Buchung von ADFC Technikkurse übermittelte IBAN " +
     iban +
     " ist leider falsch! Bitte wiederhole die Buchung mit einer korrekten IBAN.";
   GmailApp.sendEmail(empfaenger, subject, body);
