@@ -1,3 +1,5 @@
+// TODO: Kursbeginn in kursNTD
+
 interface MapS2I {
   [others: string]: number;
 }
@@ -349,6 +351,7 @@ function onOpen() {
     .addItem("Anmeldebestätigung senden", "anmeldebestätigung")
     .addItem("Update", "update")
     .addItem("Kursteilnehmer drucken", "printKursMembers")
+    .addItem("Anmeldung prüfen", "checkBuchungManually")
     .addToUi();
 }
 
@@ -752,6 +755,7 @@ function updateForm() {
     let ok = true;
     // check if all cells of Kurs row are nonempty
     for (let hdr in kurseHdrs) {
+      if (hdr == "Kursleiter") break;
       if (isEmpty(kursObj[hdr])) {
         Logger.log("In Kurse Zeile mit leerem Feld %s", hdr);
         ok = false;
@@ -1009,8 +1013,8 @@ function printKursMembers() {
   let range = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn());
   sheet.setActiveSelection(range);
   printSelectedRange();
-  Utilities.sleep(10000);
-  ss.deleteSheet(sheet);
+  // Utilities.sleep(10000);
+  // ss.deleteSheet(sheet);
 }
 
 function objectToQueryString(obj: any) {
@@ -1064,4 +1068,56 @@ function printSelectedRange() {
     ev.setHeight(10).setWidth(100),
     "Drucke Auswahl",
   );
+}
+
+function checkBuchungManually() {
+  if (!inited) init();
+  let sheet = SpreadsheetApp.getActiveSheet();
+  if (sheet.getName() != "Buchungen") {
+    SpreadsheetApp.getUi().alert(
+      "Bitte eine Zeile im Sheet 'Buchungen' selektieren",
+    );
+    return;
+  }
+  let curCell = sheet.getSelection().getCurrentCell();
+  if (!curCell) {
+    SpreadsheetApp.getUi().alert("Bitte zuerst Teilnehmerzeile selektieren");
+    return;
+  }
+  let rowIdx = curCell.getRow();
+  if (rowIdx < 2 || rowIdx > sheet.getLastRow()) {
+    SpreadsheetApp.getUi().alert(
+      "Die ausgewählte Zeile ist ungültig, bitte zuerst Teilnehmerzeile selektieren",
+    );
+    return;
+  }
+  let rowNote = sheet.getRange(rowIdx, 1).getNote();
+  if (!isEmpty(rowNote)) {
+    SpreadsheetApp.getUi().alert(
+      "Die ausgewählte Zeile hat eine Notiz und ist deshalb ungültig",
+    );
+    return;
+  }
+  let brange = sheet.getRange(rowIdx, 1, 1, sheet.getLastColumn());
+  let brow = brange.getValues()[0];
+  if (!isEmpty(brow[anmeldebestIndex - 1])) {
+    SpreadsheetApp.getUi().alert(
+      "Die ausgewählte Buchung wurde schon bestätigt",
+    );
+    return;
+  }
+
+  let e: SSEvent = {
+    namedValues: {
+      Vorname: [brow[vornameIndex - 1]],
+      Name: [brow[nameIndex - 1]],
+      Anrede: [brow[herrFrauIndex - 1]],
+      "E-Mail-Adresse": [brow[mailIndex - 1]],
+      "ADFC-Mitgliedsnummer": [brow[mitgliederNrIndex - 1]],
+      "IBAN-Kontonummer": [brow[headers["Buchungen"]["IBAN-Kontonummer"] - 1]],
+      [kursFrage]: [brow[kurseIndex - 1]],
+    },
+    range: brange,
+  };
+  checkBuchung(e);
 }
